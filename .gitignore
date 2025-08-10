@@ -1,0 +1,70 @@
+# ==============================================================================
+# Development Environment & IDE (Visual Studio Code)
+# Ignore workspace settings, debugging configurations, and other local preferences.
+# ==============================================================================
+.vscode/
+
+# ==============================================================================
+# Virtual Environments (Poetry/venv)
+# Never version your virtual environment. The pyproject.toml is used to recreate it.
+# ==============================================================================
+.venv/
+venv/
+ENV/
+env/
+.env/
+
+# ==============================================================================
+# Python Caches & Artifacts
+# Compiled files, caches, and built packages.
+# ==============================================================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ==============================================================================
+# Testing & Coverage Artifacts (Pytest/Coverage)
+# Caches and reports generated when running tests.
+# ==============================================================================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ==============================================================================
+# Operating System Generated Files
+# Metadata files specific to macOS and Windows.
+# ==============================================================================
+.DS_Store
+Thumbs.db
+
+# ==============================================================================
+# Notebook Artifacts (NOVO)
+# Ignore Jupyter Notebook checkpoints and caches, but keep the .ipynb files.
+# ==============================================================================
+.ipynb_checkpoints/
+
+# ==============================================================================
+# Project Generated Data & Logs
+# Important: the code that generates the data is versioned, but the data is not.
+# ==============================================================================
+*.log
+*.csv
+data/
+outputs/
+*.wav
+*.mp3
+
+# ==============================================================================
+# Credentials & Environment Variables
+# NEVER version passwords, API keys, or other sensitive information.
+# ==============================================================================
+.env
+*.env
+client_secrets.json
+credentials.json
+token.json
