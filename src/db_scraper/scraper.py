@@ -117,8 +117,80 @@ def extract_playlist_data(playlist_id: str, limit: int = 500) -> List[Dict[str, 
 
     return all_songs_data
 
+def _download_and_audit_dataframe(df: pd.DataFrame, output_dir: str) -> pd.DataFrame:
+    """
+    Downloads audio files from URLs specified in the input DataFrame, organizes them into folders by author,
+    and updates the DataFrame with audit information.
+    This function processes each row in the DataFrame that contains a valid 'audio_url', downloads the corresponding
+    audio file, and saves it in a directory named after the first listed author (or "Autor Desconhecido" if not available).
+    The filename is generated from a slugified version of the title and the 'data_id'. The function also ensures that
+    audit columns ('pasta', 'nome_arquivo', 'data_download') exist in the DataFrame, and updates them with the folder name,
+    filename, and download date for each successfully downloaded file.
+    Args:
+        df (pd.DataFrame): Input DataFrame containing at least the columns 'audio_url', 'autor', 'titulo', and 'data_id'.
+        output_dir (str): Path to the directory where audio files will be saved.
+    Returns:
+        pd.DataFrame: The updated DataFrame with audit information for each processed audio file.
+    Notes:
+        - If the audio file already exists, it is not downloaded again, but the audit information is updated.
+        - If the download fails, the corresponding audit columns are not updated for that row.
+        - The function prints progress and error messages to the console during execution.
+    """
+    # Ensure audit columns exist
+    for col in ['pasta', 'nome_arquivo', 'data_download']:
+        if col not in df.columns:
+            df[col] = pd.Series(dtype='object')
 
-def save_playlist_to_csv(playlist_id: str, output_dir: str, limit: int = 500):
+    df_com_audio = df[df['audio_url'].notna() & (df['audio_url'] != '')].copy()
+    print(f"\nEncontradas {len(df_com_audio)} músicas na lista para baixar.")
+
+    for index, row in df_com_audio.iterrows():
+        download_status = False
+        nome_pasta = "Autor Desconhecido"
+        nome_arquivo_final = ""
+        autores = str(row["autor"])
+        if pd.notna(autores) and autores:
+            primeiro_autor = autores.split(" / ")[0].strip()
+            nome_pasta = re.sub(r'[\\/*?:"<>|]', "", primeiro_autor)
+        
+        download_path = Path(output_dir) / nome_pasta
+        os.makedirs(download_path, exist_ok=True)
+
+        titulo = str(row["titulo"])
+        data_id = row["data_id"]
+        titulo_sem_acentos = unicodedata.normalize("NFKD", titulo).encode("ASCII", "ignore").decode("utf-8")
+        titulo_limpo = re.sub(r"[^a-z0-9\s-]", "", titulo_sem_acentos.lower())
+        slug_titulo = re.sub(r"[\s-]+", "-", titulo_limpo).strip("-")
+        nome_arquivo_final = f"{slug_titulo}_{str(data_id)}.mp3"
+        filepath = download_path / nome_arquivo_final
+
+        if os.path.exists(filepath):
+            print(f"  - Já existe: '{titulo}'. Marcando como sucesso.")
+            download_status = True
+        else:
+            print(f"  - Baixando: '{titulo}'...")
+            try:
+                audio_response = requests.get(str(row["audio_url"]), headers=config.BASE_HEADERS, stream=True, timeout=20)
+                audio_response.raise_for_status()
+                with open(filepath, "wb") as f:
+                    for chunk in audio_response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                print(f"    -> Sucesso.")
+                download_status = True
+            except requests.RequestException as e:
+                print(f"    -> Erro ao baixar: {e}")
+                download_status = False
+
+        data_de_hoje = datetime.now().strftime("%d/%m/%Y")
+        df.loc[index, "pasta"] = nome_pasta
+        df.loc[index, "nome_arquivo"] = nome_arquivo_final
+        if download_status:
+            df.loc[index, "data_download"] = data_de_hoje
+            
+    return df
+
+
+def save_playlist_to_csv(playlist_id: str, output_dir: str, limit: int = 500) -> None:
     """
     Extracts playlist metadata and saves the result to a CSV file.
 
@@ -128,7 +200,7 @@ def save_playlist_to_csv(playlist_id: str, output_dir: str, limit: int = 500):
         limit: The maximum number of tracks to extract (default: 500).
     """
     print("--- Iniciando processo ---")
-    dados_musicas = extract_playlist_data(playlist_id, limit)
+    dados_musicas = extract_playlist_data(playlist_id=playlist_id, limit=limit)
 
     if not dados_musicas:
         print("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
@@ -138,15 +210,60 @@ def save_playlist_to_csv(playlist_id: str, output_dir: str, limit: int = 500):
     df = df.reindex(columns=config.OUTPUT_COLUMNS)
 
     os.makedirs(output_dir, exist_ok=True)
-    filename = f"playlist_{playlist_id}_metadados.csv"
+    filename = f"playlist_{playlist_id}_metadata.csv"
     filepath = Path(output_dir) / filename
     df.to_csv(filepath, index=False, encoding="utf-8-sig")
 
     print("\n--- Extração concluída ---")
     print(f"Os metadados foram salvos com sucesso em: {filepath}")
 
+def download_from_csv(input_csv_path: str, output_dir: str) -> None:
+    """
+    Reads a CSV file (potentially edited by the user), downloads audio files, and saves a new audit CSV.
 
-def process_playlist(playlist_id: str, output_dir: str, limit: int = 500) -> None:
+    This function loads track metadata from a CSV file, attempts to download the audio files for each track with a valid audio URL,
+    and saves an updated CSV file with audit information (such as download status, folder, and filename) in the same directory as the input CSV.
+    The audit CSV is timestamped to avoid overwriting the original.
+
+    Args:
+        input_csv_path (str): The path to the input CSV file containing track metadata and audio URLs.
+        output_dir (str): The directory where audio files will be saved.
+
+    Process:
+        1. Reads the input CSV and validates its existence.
+        2. Downloads audio files for tracks with valid audio URLs, organizing them into subfolders by author.
+        3. Updates the DataFrame with audit information (folder, filename, download date).
+        4. Saves a new audit CSV with a timestamp in the filename.
+
+    Notes:
+        - If the input CSV is not found, the function prints an error and returns.
+        - Only tracks with a non-empty 'audio_url' are processed for download.
+        - The function prints progress and status messages throughout the process.
+    """
+    print("\n--- Iniciando Etapa 2: Download a partir de CSV ---")
+    try:
+        df = pd.read_csv(
+            input_csv_path,
+            dtype=config.COLUMN_DTYPES
+        )
+        print(f"Lendo dados de: {input_csv_path}")
+    except FileNotFoundError:
+        print(f"Erro: O arquivo CSV '{input_csv_path}' não foi encontrado.")
+        return
+    
+    df_audit = _download_and_audit_dataframe(df, output_dir)
+    
+    p = Path(input_csv_path)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    new_filename = f"{p.stem}_{timestamp}{p.suffix}"
+    new_filepath = p.parent / new_filename
+
+    df_audit.to_csv(new_filepath, index=False, encoding='utf-8-sig')
+    print(f"\n--- Processo de Download Concluído ---")
+    print(f"O relatório de auditoria foi salvo em: {new_filepath}")
+
+
+def download_from_playlist(playlist_id: str, output_dir: str, limit: int = 500) -> None:
     """
     Orchestrates the complete process of extracting playlist data, downloading audio files,
     and saving a final audited CSV report with download statuses.
@@ -162,82 +279,22 @@ def process_playlist(playlist_id: str, output_dir: str, limit: int = 500) -> Non
     The function prints progress and status messages throughout the process.
     """
     print("--- Iniciando processo: Extração, Download e Auditoria ---")
-    dados_musicas = extract_playlist_data(playlist_id, limit=limit)
+    dados_musicas = extract_playlist_data(playlist_id=playlist_id, limit=limit)
 
     if not dados_musicas:
         print("Nenhuma música foi extraída. Encerrando o processo.")
         return
 
     df = pd.DataFrame(dados_musicas)
-    df["pasta"] = ""
-    df["nome_arquivo"] = ""
-    df["data_download"] = ""
-    df_com_audio = df[df["audio_url"].notna() & (df["audio_url"] != "")].copy()
-
-    print(f"\nEncontradas {len(df_com_audio)} músicas com URL de áudio para baixar.")
-
-    for index, row in df_com_audio.iterrows():
-        # ... (lógica de download e atualização do df é a mesma da versão anterior)
-        download_status = False
-        nome_pasta = "Autor Desconhecido"
-        nome_arquivo_final = ""
-        autores = str(row["autor"])
-        if pd.notna(autores) and autores:
-            primeiro_autor = autores.split(" / ")[0].strip()
-            nome_pasta = re.sub(r'[\\/*?:"<>|]', "", primeiro_autor)
-
-        # O diretório de download dos MP3s será uma subpasta dentro do diretório de saída
-        download_path = Path(output_dir) / nome_pasta
-        os.makedirs(download_path, exist_ok=True)
-
-        titulo = str(row["titulo"])
-        data_id = row["data_id"]
-        titulo_sem_acentos = (
-            unicodedata.normalize("NFKD", titulo)
-            .encode("ASCII", "ignore")
-            .decode("utf-8")
-        )
-        titulo_limpo = re.sub(r"[^a-z0-9\s-]", "", titulo_sem_acentos.lower())
-        slug_titulo = re.sub(r"[\s-]+", "-", titulo_limpo).strip("-")
-        nome_arquivo_final = f"{slug_titulo}_{str(data_id)}.mp3"
-        filepath = download_path / nome_arquivo_final
-
-        if os.path.exists(filepath):
-            print(f"  - Já existe: '{titulo}'. Marcando como sucesso.")
-            download_status = True
-        else:
-            print(f"  - Baixando: '{titulo}'...")
-            try:
-                audio_response = requests.get(
-                    str(row["audio_url"]),
-                    headers=config.BASE_HEADERS,
-                    stream=True,
-                    timeout=20,
-                )
-                audio_response.raise_for_status()
-                with open(filepath, "wb") as f:
-                    for chunk in audio_response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                print(f"    -> Sucesso.")
-                download_status = True
-            except requests.RequestException as e:
-                print(f"    -> Erro ao baixar: {e}")
-                download_status = False
-
-        data_de_hoje = datetime.now().strftime("%d/%m/%Y")
-
-        df.loc[index, "pasta"] = nome_pasta
-        df.loc[index, "nome_arquivo"] = nome_arquivo_final
-        if download_status:
-            df.loc[index, "data_download"] = data_de_hoje
-
+    df_audit = _download_and_audit_dataframe(df, output_dir)
+    
     # Salva o CSV final auditado no diretório de saída principal
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     final_filename = f"playlist_{playlist_id}_completo_{timestamp}.csv"
     final_filepath = Path(output_dir) / final_filename
 
-    df = df.reindex(columns=config.OUTPUT_COLUMNS)
+    df_audit = df_audit.reindex(columns=config.OUTPUT_COLUMNS)
 
-    df.to_csv(final_filepath, index=False, encoding="utf-8-sig")
+    df_audit.to_csv(final_filepath, index=False, encoding="utf-8-sig")
     print(f"\n--- Processo Completo Concluído ---")
     print(f"O relatório final foi salvo em: {final_filepath}")

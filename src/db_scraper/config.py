@@ -14,17 +14,18 @@ API_TRACKLIST_URL_TEMPLATE = "https://discografiabrasileira.com.br/fonograma/@re
 API_CONTENT_URL_TEMPLATE = "https://discografiabrasileira.com.br/api/1.0/content/{data_id}?fields=_id,name,audio[contentUrl;duration],creator[_id;name],recordingOf[_id;name;author[_id;name]]"
 
 # Output columns for the final dataset
-OUTPUT_COLUMNS = [
-    'data_id',
-    'titulo',
-    'interprete',
-    'autor',
-    'disco',
-    'ano_lancamento_disco',
-    'data_gravacao',
-    'data_lancamento',
-    'audio_url',
-    'pasta',
-    'nome_arquivo',
-    'data_download'
-]
+COLUMN_DTYPES = {
+    'data_id': str,
+    'titulo': str,
+    'interprete': str,
+    'autor': str,
+    'disco': str,
+    'ano_lancamento_disco': str,
+    'data_gravacao': str,
+    'data_lancamento': str,
+    'audio_url': str,
+    'pasta': str,
+    'nome_arquivo': str,
+    'data_download': str
+}
+OUTPUT_COLUMNS = list(COLUMN_DTYPES.keys())
