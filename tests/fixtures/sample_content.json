@@ -1,0 +1,65 @@
+{
+    "_id": 43873,
+    "name": [
+        {
+            "@value": "PALPITE INFELIZ",
+            "_type": "Text",
+            "_order": null,
+            "_binary": null
+        }
+    ],
+    "audio": [
+        {
+            "contentUrl": [
+                {
+                    "@value": "https://discografiabrasileira.com.br/api/1.0/assets/75135",
+                    "_type": "URL",
+                    "_order": null,
+                    "_binary": 75135,
+                    "_mimeType": "audio/mpeg",
+                    "_size": 735220
+                }
+            ],
+            "duration": []
+        }
+    ],
+    "creator": [
+        {
+            "_id": 35415,
+            "name": [
+                {
+                    "@value": "Aracy de Almeida",
+                    "_type": "Text",
+                    "_order": null,
+                    "_binary": null
+                }
+            ]
+        }
+    ],
+    "recordingOf": [
+        {
+            "_id": 43874,
+            "name": [
+                {
+                    "@value": "PALPITE INFELIZ",
+                    "_type": "Text",
+                    "_order": null,
+                    "_binary": null
+                }
+            ],
+            "author": [
+                {
+                    "_id": 23092,
+                    "name": [
+                        {
+                            "@value": "Noel Rosa",
+                            "_type": "Text",
+                            "_order": null,
+                            "_binary": null
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
