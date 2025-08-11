@@ -137,7 +137,6 @@ def save_playlist_to_csv(playlist_id: str, filename: str, limit: int = 500):
     print(f"\n--- Processo Concluído ---")
     print(f"Os dados foram salvos com sucesso em: {filepath}")
 
-    return df
 
 def download_audios_from_csv(csv_filepath: str):
     """
