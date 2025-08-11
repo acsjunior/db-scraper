@@ -7,7 +7,7 @@ import pandas as pd
 from . import config
 from . import paths
 
-def extract_playlist_data(playlist_id: str) -> List[Dict[str, Any]]:
+def extract_playlist_data(playlist_id: str, limit: int = 500) -> List[Dict[str, Any]]:
     """
     Extracts detailed information about all songs in a playlist.
 
@@ -16,13 +16,14 @@ def extract_playlist_data(playlist_id: str) -> List[Dict[str, Any]]:
 
     Args:
         playlist_id: The playlist ID from the Discografia Brasileira website.
+        limit: The maximum number of tracks to extract (default: 500).
 
     Returns:
         A list of dictionaries, where each dictionary contains the
         information of a song. Returns an empty list if an error occurs.
     """
     # Build the tracklist URL using the template from config
-    tracklist_url = config.API_TRACKLIST_URL_TEMPLATE.format(playlist_id=playlist_id)
+    tracklist_url = config.API_TRACKLIST_URL_TEMPLATE.format(playlist_id=playlist_id, limit=limit)
     
     # Use the base headers directly from config, without the Referer
     headers = config.BASE_HEADERS
@@ -94,15 +95,16 @@ def extract_playlist_data(playlist_id: str) -> List[Dict[str, Any]]:
     return all_songs_data
 
 
-def save_playlist_to_csv(playlist_id: str, filename: str):
+def save_playlist_to_csv(playlist_id: str, filename: str, limit: int = 500):
     """
     Orchestrates the extraction of playlist data and saves the result to a CSV file.
 
     Args:
         playlist_id: The ID of the playlist to extract.
         filename: The name of the output CSV file (without the .csv extension).
+        limit: The maximum number of tracks to extract (default: 500).
     """
-    dados_musicas = extract_playlist_data(playlist_id)
+    dados_musicas = extract_playlist_data(playlist_id, limit)
 
     if not dados_musicas:
         print("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
