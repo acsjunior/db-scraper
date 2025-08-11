@@ -48,8 +48,13 @@ def extract_playlist_data(playlist_id: str) -> List[Dict[str, Any]]:
                 continue
 
             titulo = track.select_one('.track-name a').text.strip().title()
-            autor = track.select_one('.track-author a').text.strip()
-            interprete = track.select_one('.track-performer a').text.strip()
+
+            author_tags = track.select('.track-author a')
+            autor = ' / '.join([tag.text.strip() for tag in author_tags])
+
+            interprete_tags = track.select('.track-performer a')
+            interprete = ' / '.join([tag.text.strip() for tag in interprete_tags])
+
             disco = track.select_one('.track-duration a').text.strip()
             ano_disco = track.select_one('.track-year').text.strip()
             
@@ -126,6 +131,8 @@ def save_playlist_to_csv(playlist_id: str, filename: str):
     
     print(f"\n--- Processo Concluído ---")
     print(f"Os dados foram salvos com sucesso em: {filepath}")
+
+    return df
 
 
 if __name__ == "__main__":
