@@ -16,18 +16,24 @@ logger = logging.getLogger(__name__)
 
 def extract_playlist_data(playlist_id: str, limit: int = 500) -> List[Dict[str, Any]]:
     """
-    Extracts detailed information about all songs in a playlist.
+    Extracts detailed metadata for all tracks in a given playlist.
 
-    For each song, it retrieves the title, author, and other metadata from the initial HTML,
-    and then makes a second request to the content API to obtain the audio URL.
+    This function fetches the playlist page, parses the HTML to extract track information such as title, author, performer,
+    album, year, recording and release dates. For each track, it also attempts to retrieve the audio URL by making an additional
+    request to the content API. All extracted data is returned as a list of dictionaries, one per track.
 
     Args:
-        playlist_id: The playlist ID from the Discografia Brasileira website.
-        limit: The maximum number of tracks to extract (default: 500).
+        playlist_id (str): The unique identifier of the playlist on the Discografia Brasileira website.
+        limit (int, optional): The maximum number of tracks to extract. Defaults to 500.
 
     Returns:
-        A list of dictionaries, where each dictionary contains the
-        information of a song. Returns an empty list if an error occurs.
+        List[Dict[str, Any]]: A list of dictionaries, each containing metadata for a track. Returns an empty list if an error occurs.
+
+    Notes:
+        - If a track does not have a data-id, the audio URL will not be fetched for that track.
+        - The function logs progress, warnings, and errors using the logger.
+        - The returned dictionaries contain the following keys: data_id, titulo, autor, interprete, disco, ano_lancamento_disco,
+          data_gravacao, data_lancamento, audio_url.
     """
     # Build the tracklist URL using the template from config
     tracklist_url = config.API_TRACKLIST_URL_TEMPLATE.format(
@@ -204,12 +210,24 @@ def _download_and_audit_dataframe(df: pd.DataFrame, output_dir: str) -> pd.DataF
 
 def save_playlist_to_csv(playlist_id: str, output_dir: str, limit: int = 500) -> None:
     """
-    Extracts playlist metadata and saves the result to a CSV file.
+    Extracts playlist metadata and saves it as a CSV file.
+
+    This function retrieves detailed metadata for all tracks in a specified playlist, including title, author, performer,
+    album, year, recording and release dates, and audio URL. The extracted data is saved as a CSV file in the specified output directory.
+    The CSV columns and order are defined by config.OUTPUT_COLUMNS. If no data is extracted, no file is created.
 
     Args:
-        playlist_id: The ID of the playlist to extract.
-        filename: The output CSV filename (without the .csv extension).
-        limit: The maximum number of tracks to extract (default: 500).
+        playlist_id (str): The unique identifier of the playlist to extract.
+        output_dir (str): The directory where the resulting CSV file will be saved.
+        limit (int, optional): The maximum number of tracks to extract. Defaults to 500.
+
+    Returns:
+        None
+
+    Notes:
+        - The output CSV file is named 'playlist_{playlist_id}_metadata.csv'.
+        - If no tracks are found, the function logs a warning and does not create a file.
+        - Progress and status messages are logged using the logger.
     """
     logger.info("--- Iniciando processo ---")
     dados_musicas = extract_playlist_data(playlist_id=playlist_id, limit=limit)
@@ -275,18 +293,31 @@ def download_from_csv(input_csv_path: str, output_dir: str) -> None:
 
 def download_from_playlist(playlist_id: str, output_dir: str, limit: int = 500) -> None:
     """
-    Orchestrates the complete process of extracting playlist data, downloading audio files,
+    Orchestrates the complete workflow of extracting playlist data, downloading audio files,
     and saving a final audited CSV report with download statuses.
+
+    This function automates the end-to-end process for a playlist: it extracts all track metadata,
+    downloads available audio files (organizing them into subfolders by author), and saves a comprehensive
+    CSV report with both metadata and download results. The final CSV is timestamped and saved in the output directory.
+
     Args:
         playlist_id (str): The unique identifier of the playlist to process.
         output_dir (str): The directory where audio files and the final CSV report will be saved.
         limit (int, optional): The maximum number of tracks to process from the playlist. Defaults to 500.
+
+    Returns:
+        None
+
     Process Overview:
         1. Extracts track data from the specified playlist.
         2. Downloads available audio files, organizing them into subfolders by author.
         3. Tracks the download status for each track.
-        4. Saves a comprehensive CSV report with metadata and download results.
-    The function prints progress and status messages throughout the process.
+        4. Saves a comprehensive CSV report with metadata and download results, timestamped to avoid overwriting.
+
+    Notes:
+        - If no tracks are found, the function logs a warning and does not create any files.
+        - Progress, warnings, and errors are logged using the logger.
+        - The final CSV file is named 'playlist_{playlist_id}_completo_{timestamp}.csv'.
     """
     logger.info("--- Iniciando processo: Extração, Download e Auditoria ---")
     dados_musicas = extract_playlist_data(playlist_id=playlist_id, limit=limit)
