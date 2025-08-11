@@ -9,11 +9,6 @@ BASE_HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
 }
 
-# Template for the playlist view URL
-BASE_PLAYLIST_URL_TEMPLATE = (
-    "https://discografiabrasileira.com.br/playlists/{playlist_id}"
-)
-
 # API Templates
 API_TRACKLIST_URL_TEMPLATE = "https://discografiabrasileira.com.br/fonograma/@relationById/{playlist_id}/@type/MusicRecording/@orderBy/@.@order/@orderDir/asc/@pp/{limit}/p/1?shiro_content=true"
 API_CONTENT_URL_TEMPLATE = "https://discografiabrasileira.com.br/api/1.0/content/{data_id}?fields=_id,name,audio[contentUrl;duration],creator[_id;name],recordingOf[_id;name;author[_id;name]]"
