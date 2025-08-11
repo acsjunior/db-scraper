@@ -141,11 +141,11 @@ def save_playlist_to_csv(playlist_id: str, filename: str, limit: int = 500):
 
 def download_audios_from_csv(csv_filepath: str):
     """
-    Lê um arquivo CSV de músicas e baixa os áudios disponíveis,
-    organizando-os em pastas baseadas no primeiro autor de cada música.
+    Reads a CSV file of songs and downloads the available audio files,
+    organizing them into folders based on the first author of each song.
 
     Args:
-        csv_filepath: O caminho completo para o arquivo CSV.
+        csv_filepath: The full path to the CSV file.
     """
     print("\n--- Iniciando processo de download a partir do CSV ---")
     try:
@@ -155,12 +155,11 @@ def download_audios_from_csv(csv_filepath: str):
         print(f"Erro: O arquivo CSV '{csv_filepath}' não foi encontrado.")
         return
     
-    # 1. Inicializa as novas colunas de auditoria
+    # 1. Initialize new audit columns
     df['pasta_autor'] = ""
     df['nome_arquivo_mp3'] = ""
     df['download_sucesso'] = False
 
-    # Filtra apenas as linhas que realmente precisam de download
     df_com_audio = df[df['audio_url'].notna() & (df['audio_url'] != '')].copy()
 
     if df_com_audio.empty:
@@ -170,14 +169,11 @@ def download_audios_from_csv(csv_filepath: str):
     print(f"Encontradas {len(df_com_audio)} músicas com URL de áudio para baixar.")
     headers = config.BASE_HEADERS
 
-    # Itera sobre o DataFrame filtrado para realizar os downloads
     for index, row in df_com_audio.iterrows():
-        # Inicializa variáveis para esta iteração
         download_status = False
         nome_pasta_autor = "Autor Desconhecido"
         nome_arquivo_final = ""
 
-        # Prepara os nomes da pasta e do arquivo
         autores = str(row['autor'])
         if pd.notna(autores) and autores:
             primeiro_autor = autores.split(' / ')[0].strip()
@@ -194,7 +190,6 @@ def download_audios_from_csv(csv_filepath: str):
         nome_arquivo_final = f"{slug_titulo}_{str(data_id)}.mp3"
         filepath = output_dir / nome_arquivo_final
 
-        # Tenta baixar o arquivo
         if os.path.exists(filepath):
             print(f"  - Já existe: '{titulo}'. Marcando como sucesso.")
             download_status = True
@@ -212,12 +207,12 @@ def download_audios_from_csv(csv_filepath: str):
                 print(f"    -> Erro ao baixar: {e}")
                 download_status = False
 
-        # 2. Atualiza o DataFrame original com os resultados da auditoria
+        # 2. Update the original DataFrame with the audit results
         df.loc[index, 'pasta_autor'] = nome_pasta_autor
         df.loc[index, 'nome_arquivo_mp3'] = nome_arquivo_final
         df.loc[index, 'download_sucesso'] = download_status
 
-    # 3. Salva o novo CSV com timestamp
+    # 3. Save the new CSV with timestamp
     p = Path(csv_filepath)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     new_filename = f"{p.stem}_{timestamp}{p.suffix}"
