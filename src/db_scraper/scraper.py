@@ -6,10 +6,11 @@ import pandas as pd
 import re
 import unicodedata
 from datetime import datetime
-from pathlib import Path 
+from pathlib import Path
 
 from . import config
 from . import paths
+
 
 def extract_playlist_data(playlist_id: str, limit: int = 500) -> List[Dict[str, Any]]:
     """
@@ -27,11 +28,13 @@ def extract_playlist_data(playlist_id: str, limit: int = 500) -> List[Dict[str, 
         information of a song. Returns an empty list if an error occurs.
     """
     # Build the tracklist URL using the template from config
-    tracklist_url = config.API_TRACKLIST_URL_TEMPLATE.format(playlist_id=playlist_id, limit=limit)
-    
+    tracklist_url = config.API_TRACKLIST_URL_TEMPLATE.format(
+        playlist_id=playlist_id, limit=limit
+    )
+
     # Use the base headers directly from config, without the Referer
     headers = config.BASE_HEADERS
-    
+
     all_songs_data = []
 
     print(f"Buscando dados da playlist ID: {playlist_id}...")
@@ -39,56 +42,72 @@ def extract_playlist_data(playlist_id: str, limit: int = 500) -> List[Dict[str, 
         # --- Step 1: Get the list of tracks from the playlist ---
         response = requests.get(tracklist_url, headers=headers)
         response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
-        tracks = soup.find_all('div', class_='track')
+        soup = BeautifulSoup(response.content, "html.parser")
+        tracks = soup.find_all("div", class_="track")
         print(f"Encontradas {len(tracks)} faixas. Extraindo detalhes...")
 
         # --- Step 2: Iterate over each track to get details ---
         for track in tracks:
-            data_id_tag = track.select_one('.play-bttn')
-            data_id = data_id_tag.get('data-id') if data_id_tag else None
-            
-            titulo = track.select_one('.track-name a').text.strip().title()
+            data_id_tag = track.select_one(".play-bttn")
+            data_id = data_id_tag.get("data-id") if data_id_tag else None
 
-            author_tags = track.select('.track-author a')
-            autor = ' / '.join([tag.text.strip() for tag in author_tags])
+            titulo = track.select_one(".track-name a").text.strip().title()
 
-            interprete_tags = track.select('.track-performer a')
-            interprete = ' / '.join([tag.text.strip() for tag in interprete_tags])
+            author_tags = track.select(".track-author a")
+            autor = " / ".join([tag.text.strip() for tag in author_tags])
 
-            disco = track.select_one('.track-duration a').text.strip()
-            ano_disco = track.select_one('.track-year').text.strip()
-            
-            gravacao_label = track.find('div', class_='property-label', string='gravacao')
-            data_gravacao = gravacao_label.find_next_sibling('div').text.strip() if gravacao_label else ''
-            
-            lancamento_label = track.find('div', class_='property-label', string='lancamento')
-            data_lancamento = lancamento_label.find_next_sibling('div').text.strip() if lancamento_label else ''
+            interprete_tags = track.select(".track-performer a")
+            interprete = " / ".join([tag.text.strip() for tag in interprete_tags])
+
+            disco = track.select_one(".track-duration a").text.strip()
+            ano_disco = track.select_one(".track-year").text.strip()
+
+            gravacao_label = track.find(
+                "div", class_="property-label", string="gravacao"
+            )
+            data_gravacao = (
+                gravacao_label.find_next_sibling("div").text.strip()
+                if gravacao_label
+                else ""
+            )
+
+            lancamento_label = track.find(
+                "div", class_="property-label", string="lancamento"
+            )
+            data_lancamento = (
+                lancamento_label.find_next_sibling("div").text.strip()
+                if lancamento_label
+                else ""
+            )
 
             # --- Step 3: Make a request to the content API to get the audio URL ---
-            audio_url = ''
+            audio_url = ""
             if data_id:
                 content_url = config.API_CONTENT_URL_TEMPLATE.format(data_id=data_id)
                 try:
                     content_response = requests.get(content_url, headers=headers)
                     content_response.raise_for_status()
                     json_data = content_response.json()
-                    audio_url = json_data['audio'][0]['contentUrl'][0]['@value']
+                    audio_url = json_data["audio"][0]["contentUrl"][0]["@value"]
                 except (requests.RequestException, KeyError, IndexError):
-                    print(f"  - Aviso: Não foi possível obter a URL do áudio para a faixa '{titulo}' (ID: {data_id}).")
+                    print(
+                        f"  - Aviso: Não foi possível obter a URL do áudio para a faixa '{titulo}' (ID: {data_id})."
+                    )
             else:
-                print(f"  - Aviso: Faixa '{titulo}' não possui data-id. URL do áudio não será buscada.")
+                print(
+                    f"  - Aviso: Faixa '{titulo}' não possui data-id. URL do áudio não será buscada."
+                )
 
             song_data = {
-                'data_id': data_id,
-                'titulo': titulo,
-                'autor': autor,
-                'interprete': interprete,
-                'disco': disco,
-                'ano_lancamento_disco': ano_disco,
-                'data_gravacao': data_gravacao,
-                'data_lancamento': data_lancamento,
-                'audio_url': audio_url
+                "data_id": data_id,
+                "titulo": titulo,
+                "autor": autor,
+                "interprete": interprete,
+                "disco": disco,
+                "ano_lancamento_disco": ano_disco,
+                "data_gravacao": data_gravacao,
+                "data_lancamento": data_lancamento,
+                "audio_url": audio_url,
             }
             all_songs_data.append(song_data)
 
@@ -115,26 +134,26 @@ def save_playlist_to_csv(playlist_id: str, filename: str, limit: int = 500):
         return
 
     df = pd.DataFrame(dados_musicas)
-    
+
     output_cols = [
-        'data_id',
-        'titulo',
-        'interprete',
-        'autor',
-        'disco',
-        'ano_lancamento_disco',
-        'data_gravacao',
-        'data_lancamento',
-        'audio_url'
+        "data_id",
+        "titulo",
+        "interprete",
+        "autor",
+        "disco",
+        "ano_lancamento_disco",
+        "data_gravacao",
+        "data_lancamento",
+        "audio_url",
     ]
     df = df[output_cols]
 
     output_dir = paths.MUSICS_DIR
     os.makedirs(output_dir, exist_ok=True)
     filepath = output_dir / f"{filename}.csv"
-    df.to_csv(filepath, index=False, encoding='utf-8-sig')
-    
-    print(f"\n--- Processo Concluído ---")
+    df.to_csv(filepath, index=False, encoding="utf-8-sig")
+
+    print("\n--- Processo Concluído ---")
     print(f"Os dados foram salvos com sucesso em: {filepath}")
 
 
@@ -153,13 +172,13 @@ def download_audios_from_csv(csv_filepath: str):
     except FileNotFoundError:
         print(f"Erro: O arquivo CSV '{csv_filepath}' não foi encontrado.")
         return
-    
-    # 1. Initialize new audit columns
-    df['pasta_autor'] = ""
-    df['nome_arquivo_mp3'] = ""
-    df['download_sucesso'] = False
 
-    df_com_audio = df[df['audio_url'].notna() & (df['audio_url'] != '')].copy()
+    # 1. Initialize new audit columns
+    df["pasta_autor"] = ""
+    df["nome_arquivo_mp3"] = ""
+    df["download_sucesso"] = False
+
+    df_com_audio = df[df["audio_url"].notna() & (df["audio_url"] != "")].copy()
 
     if df_com_audio.empty:
         print("Nenhuma música com URL de áudio encontrada para download.")
@@ -173,19 +192,23 @@ def download_audios_from_csv(csv_filepath: str):
         nome_pasta_autor = "Autor Desconhecido"
         nome_arquivo_final = ""
 
-        autores = str(row['autor'])
+        autores = str(row["autor"])
         if pd.notna(autores) and autores:
-            primeiro_autor = autores.split(' / ')[0].strip()
+            primeiro_autor = autores.split(" / ")[0].strip()
             nome_pasta_autor = re.sub(r'[\\/*?:"<>|]', "", primeiro_autor)
-        
+
         output_dir = paths.MUSICS_DIR / nome_pasta_autor
         os.makedirs(output_dir, exist_ok=True)
 
-        titulo = str(row['titulo'])
-        data_id = row['data_id']
-        titulo_sem_acentos = unicodedata.normalize('NFKD', titulo).encode('ASCII', 'ignore').decode('utf-8')
-        titulo_limpo = re.sub(r'[^a-z0-9\s-]', '', titulo_sem_acentos.lower())
-        slug_titulo = re.sub(r'[\s-]+', '-', titulo_limpo).strip('-')
+        titulo = str(row["titulo"])
+        data_id = row["data_id"]
+        titulo_sem_acentos = (
+            unicodedata.normalize("NFKD", titulo)
+            .encode("ASCII", "ignore")
+            .decode("utf-8")
+        )
+        titulo_limpo = re.sub(r"[^a-z0-9\s-]", "", titulo_sem_acentos.lower())
+        slug_titulo = re.sub(r"[\s-]+", "-", titulo_limpo).strip("-")
         nome_arquivo_final = f"{slug_titulo}_{str(data_id)}.mp3"
         filepath = output_dir / nome_arquivo_final
 
@@ -195,31 +218,34 @@ def download_audios_from_csv(csv_filepath: str):
         else:
             print(f"  - Baixando: '{titulo}'...")
             try:
-                audio_response = requests.get(str(row['audio_url']), headers=headers, stream=True, timeout=20)
+                audio_response = requests.get(
+                    str(row["audio_url"]), headers=headers, stream=True, timeout=20
+                )
                 audio_response.raise_for_status()
-                with open(filepath, 'wb') as f:
+                with open(filepath, "wb") as f:
                     for chunk in audio_response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                print(f"    -> Sucesso.")
+                print("    -> Sucesso.")
                 download_status = True
             except requests.RequestException as e:
                 print(f"    -> Erro ao baixar: {e}")
                 download_status = False
 
         # 2. Update the original DataFrame with the audit results
-        df.loc[index, 'pasta_autor'] = nome_pasta_autor
-        df.loc[index, 'nome_arquivo_mp3'] = nome_arquivo_final
-        df.loc[index, 'download_sucesso'] = download_status
+        df.loc[index, "pasta_autor"] = nome_pasta_autor
+        df.loc[index, "nome_arquivo_mp3"] = nome_arquivo_final
+        df.loc[index, "download_sucesso"] = download_status
 
     # 3. Save the new CSV with timestamp
     p = Path(csv_filepath)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     new_filename = f"{p.stem}_{timestamp}{p.suffix}"
     new_filepath = p.parent / new_filename
 
-    df.to_csv(new_filepath, index=False, encoding='utf-8-sig')
-    print(f"\n--- Processo de Auditoria Concluído ---")
+    df.to_csv(new_filepath, index=False, encoding="utf-8-sig")
+    print("\n--- Processo de Auditoria Concluído ---")
     print(f"O DataFrame atualizado foi salvo em: {new_filepath}")
+
 
 if __name__ == "__main__":
     playlist_id = "248904"
