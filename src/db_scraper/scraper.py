@@ -135,27 +135,16 @@ def save_playlist_to_csv(playlist_id: str, output_dir: str, limit: int = 500):
         return
 
     df = pd.DataFrame(dados_musicas)
-
-    output_cols = [
-        "data_id",
-        "titulo",
-        "interprete",
-        "autor",
-        "disco",
-        "ano_lancamento_disco",
-        "data_gravacao",
-        "data_lancamento",
-        "audio_url",
-    ]
-    df = df.reindex(columns=output_cols)
+    df = df.reindex(columns=config.OUTPUT_COLUMNS)
 
     os.makedirs(output_dir, exist_ok=True)
-    filename = f"playlist_{playlist_id}_metadados.csv" 
+    filename = f"playlist_{playlist_id}_metadados.csv"
     filepath = Path(output_dir) / filename
     df.to_csv(filepath, index=False, encoding="utf-8-sig")
 
     print("\n--- Extração concluída ---")
     print(f"Os metadados foram salvos com sucesso em: {filepath}")
+
 
 def process_playlist(playlist_id: str, output_dir: str, limit: int = 500) -> None:
     """
@@ -180,32 +169,36 @@ def process_playlist(playlist_id: str, output_dir: str, limit: int = 500) -> Non
         return
 
     df = pd.DataFrame(dados_musicas)
-    df['pasta_autor'] = ""
-    df['nome_arquivo_mp3'] = ""
-    df['download_sucesso'] = False
-    df_com_audio = df[df['audio_url'].notna() & (df['audio_url'] != '')].copy()
-    
+    df["pasta"] = ""
+    df["nome_arquivo"] = ""
+    df["data_download"] = ""
+    df_com_audio = df[df["audio_url"].notna() & (df["audio_url"] != "")].copy()
+
     print(f"\nEncontradas {len(df_com_audio)} músicas com URL de áudio para baixar.")
 
     for index, row in df_com_audio.iterrows():
         # ... (lógica de download e atualização do df é a mesma da versão anterior)
         download_status = False
-        nome_pasta_autor = "Autor Desconhecido"
+        nome_pasta = "Autor Desconhecido"
         nome_arquivo_final = ""
-        autores = str(row['autor'])
+        autores = str(row["autor"])
         if pd.notna(autores) and autores:
-            primeiro_autor = autores.split(' / ')[0].strip()
-            nome_pasta_autor = re.sub(r'[\\/*?:"<>|]', "", primeiro_autor)
-        
+            primeiro_autor = autores.split(" / ")[0].strip()
+            nome_pasta = re.sub(r'[\\/*?:"<>|]', "", primeiro_autor)
+
         # O diretório de download dos MP3s será uma subpasta dentro do diretório de saída
-        download_path = Path(output_dir) / nome_pasta_autor
+        download_path = Path(output_dir) / nome_pasta
         os.makedirs(download_path, exist_ok=True)
-        
-        titulo = str(row['titulo'])
-        data_id = row['data_id']
-        titulo_sem_acentos = unicodedata.normalize('NFKD', titulo).encode('ASCII', 'ignore').decode('utf-8')
-        titulo_limpo = re.sub(r'[^a-z0-9\s-]', '', titulo_sem_acentos.lower())
-        slug_titulo = re.sub(r'[\s-]+', '-', titulo_limpo).strip('-')
+
+        titulo = str(row["titulo"])
+        data_id = row["data_id"]
+        titulo_sem_acentos = (
+            unicodedata.normalize("NFKD", titulo)
+            .encode("ASCII", "ignore")
+            .decode("utf-8")
+        )
+        titulo_limpo = re.sub(r"[^a-z0-9\s-]", "", titulo_sem_acentos.lower())
+        slug_titulo = re.sub(r"[\s-]+", "-", titulo_limpo).strip("-")
         nome_arquivo_final = f"{slug_titulo}_{str(data_id)}.mp3"
         filepath = download_path / nome_arquivo_final
 
@@ -215,9 +208,14 @@ def process_playlist(playlist_id: str, output_dir: str, limit: int = 500) -> Non
         else:
             print(f"  - Baixando: '{titulo}'...")
             try:
-                audio_response = requests.get(str(row['audio_url']), headers=config.BASE_HEADERS, stream=True, timeout=20)
+                audio_response = requests.get(
+                    str(row["audio_url"]),
+                    headers=config.BASE_HEADERS,
+                    stream=True,
+                    timeout=20,
+                )
                 audio_response.raise_for_status()
-                with open(filepath, 'wb') as f:
+                with open(filepath, "wb") as f:
                     for chunk in audio_response.iter_content(chunk_size=8192):
                         f.write(chunk)
                 print(f"    -> Sucesso.")
@@ -225,23 +223,21 @@ def process_playlist(playlist_id: str, output_dir: str, limit: int = 500) -> Non
             except requests.RequestException as e:
                 print(f"    -> Erro ao baixar: {e}")
                 download_status = False
-        
-        df.loc[index, 'pasta_autor'] = nome_pasta_autor
-        df.loc[index, 'nome_arquivo_mp3'] = nome_arquivo_final
-        df.loc[index, 'download_sucesso'] = download_status
+
+        data_de_hoje = datetime.now().strftime("%d/%m/%Y")
+
+        df.loc[index, "pasta"] = nome_pasta
+        df.loc[index, "nome_arquivo"] = nome_arquivo_final
+        if download_status:
+            df.loc[index, "data_download"] = data_de_hoje
 
     # Salva o CSV final auditado no diretório de saída principal
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     final_filename = f"playlist_{playlist_id}_completo_{timestamp}.csv"
     final_filepath = Path(output_dir) / final_filename
 
-    colunas_finais = [
-        'data_id', 'titulo', 'interprete', 'autor', 'disco', 'ano_lancamento_disco', 
-        'data_gravacao', 'data_lancamento', 'audio_url', 'pasta_autor', 
-        'nome_arquivo_mp3', 'download_sucesso'
-    ]
-    df = df.reindex(columns=colunas_finais)
+    df = df.reindex(columns=config.OUTPUT_COLUMNS)
 
-    df.to_csv(final_filepath, index=False, encoding='utf-8-sig')
+    df.to_csv(final_filepath, index=False, encoding="utf-8-sig")
     print(f"\n--- Processo Completo Concluído ---")
     print(f"O relatório final foi salvo em: {final_filepath}")

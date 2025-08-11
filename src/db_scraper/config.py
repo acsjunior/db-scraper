@@ -12,3 +12,19 @@ BASE_HEADERS = {
 # API Templates
 API_TRACKLIST_URL_TEMPLATE = "https://discografiabrasileira.com.br/fonograma/@relationById/{playlist_id}/@type/MusicRecording/@orderBy/@.@order/@orderDir/asc/@pp/{limit}/p/1?shiro_content=true"
 API_CONTENT_URL_TEMPLATE = "https://discografiabrasileira.com.br/api/1.0/content/{data_id}?fields=_id,name,audio[contentUrl;duration],creator[_id;name],recordingOf[_id;name;author[_id;name]]"
+
+# Output columns for the final dataset
+OUTPUT_COLUMNS = [
+    'data_id',
+    'titulo',
+    'interprete',
+    'autor',
+    'disco',
+    'ano_lancamento_disco',
+    'data_gravacao',
+    'data_lancamento',
+    'audio_url',
+    'pasta',
+    'nome_arquivo',
+    'data_download'
+]
