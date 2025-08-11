@@ -41,12 +41,8 @@ def extract_playlist_data(playlist_id: str) -> List[Dict[str, Any]]:
         # --- Step 2: Iterate over each track to get details ---
         for track in tracks:
             data_id_tag = track.select_one('.play-bttn')
-            data_id = data_id_tag['data-id'] if data_id_tag else None
+            data_id = data_id_tag.get('data-id') if data_id_tag else None
             
-            if not data_id:
-                print("  - Aviso: Faixa encontrada sem data-id. Pulando.")
-                continue
-
             titulo = track.select_one('.track-name a').text.strip().title()
 
             author_tags = track.select('.track-author a')
@@ -65,15 +61,18 @@ def extract_playlist_data(playlist_id: str) -> List[Dict[str, Any]]:
             data_lancamento = lancamento_label.find_next_sibling('div').text.strip() if lancamento_label else ''
 
             # --- Step 3: Make a request to the content API to get the audio URL ---
-            content_url = config.API_CONTENT_URL_TEMPLATE.format(data_id=data_id)
             audio_url = ''
-            try:
-                content_response = requests.get(content_url, headers=headers)
-                content_response.raise_for_status()
-                json_data = content_response.json()
-                audio_url = json_data['audio'][0]['contentUrl'][0]['@value']
-            except (requests.RequestException, KeyError, IndexError):
-                print(f"  - Aviso: Não foi possível obter a URL do áudio para a faixa '{titulo}' (ID: {data_id}).")
+            if data_id:
+                content_url = config.API_CONTENT_URL_TEMPLATE.format(data_id=data_id)
+                try:
+                    content_response = requests.get(content_url, headers=headers)
+                    content_response.raise_for_status()
+                    json_data = content_response.json()
+                    audio_url = json_data['audio'][0]['contentUrl'][0]['@value']
+                except (requests.RequestException, KeyError, IndexError):
+                    print(f"  - Aviso: Não foi possível obter a URL do áudio para a faixa '{titulo}' (ID: {data_id}).")
+            else:
+                print(f"  - Aviso: Faixa '{titulo}' não possui data-id. URL do áudio não será buscada.")
 
             song_data = {
                 'data_id': data_id,
@@ -136,6 +135,7 @@ def save_playlist_to_csv(playlist_id: str, filename: str):
 
 
 if __name__ == "__main__":
-    playlist_id = "248904"
+    # playlist_id = "248904"
+    playlist_id ="247664"
     filename = f"playlist_{playlist_id}"
     save_playlist_to_csv(playlist_id, filename)
