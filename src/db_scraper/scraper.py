@@ -1,5 +1,5 @@
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 from typing import List, Dict, Any
 import os
 import pandas as pd
@@ -8,122 +8,96 @@ import unicodedata
 from datetime import datetime
 from pathlib import Path
 import logging
+from urllib.parse import quote_plus
 
 from . import config
 
 logger = logging.getLogger(__name__)
 
 
-def extract_playlist_data(playlist_id: str, limit: int = 500) -> List[Dict[str, Any]]:
+def _parse_track_data(track: Tag, headers: dict) -> Dict[str, Any]:
     """
-    Extracts detailed metadata for all tracks in a given playlist.
+    Parses a single BeautifulSoup 'track' element and extracts all relevant metadata.
 
-    This function fetches the playlist page, parses the HTML to extract track information such as title, author, performer,
-    album, year, recording and release dates. For each track, it also attempts to retrieve the audio URL by making an additional
-    request to the content API. All extracted data is returned as a list of dictionaries, one per track.
+    This helper function centralizes the logic for extracting track information from the HTML structure.
+    It retrieves the track's ID, title, author(s), performer(s), album, year, recording and release dates,
+    and attempts to fetch the audio URL from the content API if a data-id is present.
 
     Args:
-        playlist_id (str): The unique identifier of the playlist on the Discografia Brasileira website.
-        limit (int, optional): The maximum number of tracks to extract. Defaults to 500.
+        track (Tag): A BeautifulSoup Tag object representing a single track element.
+        headers (dict): HTTP headers to use for the API request to fetch the audio URL.
 
     Returns:
-        List[Dict[str, Any]]: A list of dictionaries, each containing metadata for a track. Returns an empty list if an error occurs.
+        Dict[str, Any]: A dictionary containing the extracted metadata for the track, with the following keys:
+            - data_id: The unique identifier of the track (str or None).
+            - titulo: The title of the track (str).
+            - autor: The author(s) of the track, separated by ' / ' (str).
+            - interprete: The performer(s) of the track, separated by ' / ' (str).
+            - disco: The album or record name (str).
+            - ano_lancamento_disco: The release year of the album (str).
+            - data_gravacao: The recording date (str).
+            - data_lancamento: The release date (str).
+            - audio_url: The URL to the audio file, if available (str, empty if not found).
 
     Notes:
-        - If a track does not have a data-id, the audio URL will not be fetched for that track.
-        - The function logs progress, warnings, and errors using the logger.
-        - The returned dictionaries contain the following keys: data_id, titulo, autor, interprete, disco, ano_lancamento_disco,
-          data_gravacao, data_lancamento, audio_url.
+        - If the track does not have a data-id, the audio_url will be an empty string.
+        - If any field is missing in the HTML, a default value is used (e.g., empty string or "Título Desconhecido").
+        - Warnings are logged if the audio URL cannot be retrieved.
     """
-    # Build the tracklist URL using the template from config
-    tracklist_url = config.API_TRACKLIST_URL_TEMPLATE.format(
-        playlist_id=playlist_id, limit=limit
+    data_id_tag = track.select_one(".play-bttn")
+    data_id = data_id_tag.get("data-id") if data_id_tag else None
+
+    titulo_tag = track.select_one(".track-name a")
+    titulo = titulo_tag.text.strip().title() if titulo_tag else "Título Desconhecido"
+
+    author_tags = track.select(".track-author a")
+    autor = " / ".join([tag.text.strip() for tag in author_tags])
+
+    interprete_tags = track.select(".track-performer a")
+    interprete = " / ".join([tag.text.strip() for tag in interprete_tags])
+
+    disco_tag = track.select_one(".track-duration a")
+    disco = disco_tag.text.strip() if disco_tag else ""
+
+    ano_disco_tag = track.select_one(".track-year")
+    ano_disco = ano_disco_tag.text.strip() if ano_disco_tag else ""
+
+    gravacao_label = track.find("div", class_="property-label", string="gravacao")
+    data_gravacao = (
+        gravacao_label.find_next_sibling("div").text.strip() if gravacao_label else ""
     )
 
-    # Use the base headers directly from config, without the Referer
-    headers = config.BASE_HEADERS
+    lancamento_label = track.find("div", class_="property-label", string="lancamento")
+    data_lancamento = (
+        lancamento_label.find_next_sibling("div").text.strip()
+        if lancamento_label
+        else ""
+    )
 
-    all_songs_data = []
-
-    logger.info(f"Buscando dados da playlist ID: {playlist_id}...")
-    try:
-        # --- Step 1: Get the list of tracks from the playlist ---
-        response = requests.get(tracklist_url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, "html.parser")
-        tracks = soup.find_all("div", class_="track")
-        logger.info(f"Encontradas {len(tracks)} faixas. Extraindo detalhes...")
-
-        # --- Step 2: Iterate over each track to get details ---
-        for track in tracks:
-            data_id_tag = track.select_one(".play-bttn")
-            data_id = data_id_tag.get("data-id") if data_id_tag else None
-
-            titulo = track.select_one(".track-name a").text.strip().title()
-
-            author_tags = track.select(".track-author a")
-            autor = " / ".join([tag.text.strip() for tag in author_tags])
-
-            interprete_tags = track.select(".track-performer a")
-            interprete = " / ".join([tag.text.strip() for tag in interprete_tags])
-
-            disco = track.select_one(".track-duration a").text.strip()
-            ano_disco = track.select_one(".track-year").text.strip()
-
-            gravacao_label = track.find(
-                "div", class_="property-label", string="gravacao"
-            )
-            data_gravacao = (
-                gravacao_label.find_next_sibling("div").text.strip()
-                if gravacao_label
-                else ""
+    audio_url = ""
+    if data_id:
+        content_url = config.API_CONTENT_URL_TEMPLATE.format(data_id=data_id)
+        try:
+            content_response = requests.get(content_url, headers=headers, timeout=10)
+            content_response.raise_for_status()
+            json_data = content_response.json()
+            audio_url = json_data["audio"][0]["contentUrl"][0]["@value"]
+        except (requests.RequestException, KeyError, IndexError):
+            logger.warning(
+                f"  - Não foi possível obter a URL do áudio para a faixa '{titulo}' (ID: {data_id})."
             )
 
-            lancamento_label = track.find(
-                "div", class_="property-label", string="lancamento"
-            )
-            data_lancamento = (
-                lancamento_label.find_next_sibling("div").text.strip()
-                if lancamento_label
-                else ""
-            )
-
-            # --- Step 3: Make a request to the content API to get the audio URL ---
-            audio_url = ""
-            if data_id:
-                content_url = config.API_CONTENT_URL_TEMPLATE.format(data_id=data_id)
-                try:
-                    content_response = requests.get(content_url, headers=headers)
-                    content_response.raise_for_status()
-                    json_data = content_response.json()
-                    audio_url = json_data["audio"][0]["contentUrl"][0]["@value"]
-                except (requests.RequestException, KeyError, IndexError):
-                    logger.warning(
-                        f"  - Aviso: Não foi possível obter a URL do áudio para a faixa '{titulo}' (ID: {data_id})."
-                    )
-            else:
-                logger.warning(
-                    f"  - Aviso: Faixa '{titulo}' não possui data-id. URL do áudio não será buscada."
-                )
-
-            song_data = {
-                "data_id": data_id,
-                "titulo": titulo,
-                "autor": autor,
-                "interprete": interprete,
-                "disco": disco,
-                "ano_lancamento_disco": ano_disco,
-                "data_gravacao": data_gravacao,
-                "data_lancamento": data_lancamento,
-                "audio_url": audio_url,
-            }
-            all_songs_data.append(song_data)
-
-    except requests.RequestException as e:
-        logger.error(f"Erro fatal ao buscar a lista de faixas: {e}")
-        return []
-
-    return all_songs_data
+    return {
+        "data_id": data_id,
+        "titulo": titulo,
+        "autor": autor,
+        "interprete": interprete,
+        "disco": disco,
+        "ano_lancamento_disco": ano_disco,
+        "data_gravacao": data_gravacao,
+        "data_lancamento": data_lancamento,
+        "audio_url": audio_url,
+    }
 
 
 def _download_and_audit_dataframe(df: pd.DataFrame, output_dir: str) -> pd.DataFrame:
@@ -208,6 +182,118 @@ def _download_and_audit_dataframe(df: pd.DataFrame, output_dir: str) -> pd.DataF
     return df
 
 
+def extract_playlist_data(playlist_id: str, limit: int = 500) -> List[Dict[str, Any]]:
+    """
+    Extracts detailed metadata for all tracks in a given playlist.
+
+    This function fetches the playlist page, parses the HTML to extract track information for each song using the
+    helper function _parse_track_data, and returns a list of dictionaries with all relevant metadata. For each track,
+    it attempts to retrieve the audio URL by making an additional request to the content API if a data-id is present.
+
+    Args:
+        playlist_id (str): The unique identifier of the playlist on the Discografia Brasileira website.
+        limit (int, optional): The maximum number of tracks to extract. Defaults to 500.
+
+    Returns:
+        List[Dict[str, Any]]: A list of dictionaries, each containing metadata for a track. Returns an empty list if an error occurs.
+
+    Notes:
+        - Uses the _parse_track_data helper to centralize parsing logic.
+        - If a track does not have a data-id, the audio_url will be an empty string.
+        - The function logs progress, warnings, and errors using the logger.
+        - The returned dictionaries contain the following keys: data_id, titulo, autor, interprete, disco, ano_lancamento_disco,
+          data_gravacao, data_lancamento, audio_url.
+    """
+    # Build the tracklist URL using the template from config
+    tracklist_url = config.API_TRACKLIST_URL_TEMPLATE.format(
+        playlist_id=playlist_id, limit=limit
+    )
+
+    headers = config.BASE_HEADERS
+
+    logger.info(f"Buscando dados da playlist ID: {playlist_id}...")
+    try:
+        response = requests.get(tracklist_url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, "html.parser")
+        tracks = soup.find_all("div", class_="track")
+        logger.info(f"Encontradas {len(tracks)} faixas. Extraindo detalhes...")
+
+        all_songs_data = [_parse_track_data(track, headers) for track in tracks]
+
+    except requests.RequestException as e:
+        logger.error(f"Erro fatal ao buscar a lista de faixas: {e}")
+        return []
+
+    return all_songs_data
+
+
+def extract_author_data(author_name: str) -> List[Dict[str, Any]]:
+    """
+    Extracts metadata for all tracks by a given author, handling pagination.
+
+    This function fetches all pages of tracks associated with the specified author, parses the HTML to extract
+    track information for each song using the helper function _parse_track_data, and returns a list of dictionaries
+    with all relevant metadata. Pagination is handled automatically by following the "Next" page links until no more
+    tracks are found.
+
+    Args:
+        author_name (str): The name of the author whose tracks should be extracted.
+
+    Returns:
+        List[Dict[str, Any]]: A list of dictionaries, each containing metadata for a track by the author.
+        Returns an empty list if no tracks are found or an error occurs.
+
+    Notes:
+        - Uses the _parse_track_data helper to centralize parsing logic.
+        - If a track does not have a data-id, the audio_url will be an empty string.
+        - The function logs progress, warnings, and errors using the logger.
+        - The returned dictionaries contain the following keys: data_id, titulo, autor, interprete, disco, ano_lancamento_disco,
+          data_gravacao, data_lancamento, audio_url.
+        - Pagination is handled by following the "Next" page link until it is no longer present.
+    """
+    # Format the author's name to be URL-safe (e.g., "Nilton Bastos" -> "Nilton%20Bastos")
+    formatted_author = quote_plus(author_name)
+    next_page_url = config.API_AUTHOR_URL_TEMPLATE.format(author_name=formatted_author)
+
+    headers = config.BASE_HEADERS
+    all_songs_data = []
+
+    page_num = 1
+    while next_page_url:
+        logger.info(f"Buscando dados do autor '{author_name}', página {page_num}...")
+        try:
+            response = requests.get(next_page_url, headers=headers)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, "html.parser")
+            tracks = soup.find_all("div", class_="track")
+            if not tracks:
+                logger.info(
+                    "Nenhuma faixa encontrada nesta página. Encerrando a busca do autor."
+                )
+                break
+
+            logger.info(
+                f"Encontradas {len(tracks)} faixas na página {page_num}. Extraindo detalhes..."
+            )
+
+            for track in tracks:
+                all_songs_data.append(_parse_track_data(track, headers))
+
+            next_page_tag = soup.select_one('span.pagination-item a[aria-label="Next"]')
+            if next_page_tag and next_page_tag.has_attr("href"):
+                next_page_url = next_page_tag["href"]
+                page_num += 1
+            else:
+                next_page_url = None
+
+        except requests.RequestException as e:
+            logger.error(f"Erro fatal ao buscar a página do autor: {e}")
+            break
+
+    return all_songs_data
+
+
 def save_playlist_to_csv(playlist_id: str, output_dir: str, limit: int = 500) -> None:
     """
     Extracts playlist metadata and saves it as a CSV file.
@@ -246,6 +332,51 @@ def save_playlist_to_csv(playlist_id: str, output_dir: str, limit: int = 500) ->
 
     logger.info("\n--- Extração concluída ---")
     logger.info(f"Os metadados foram salvos com sucesso em: {filepath}")
+
+
+def save_author_to_csv(author_name: str, output_dir: str) -> None:
+    """
+    Extracts metadata for all tracks by a given author and saves it as a CSV file.
+
+    This function retrieves detailed metadata for all tracks associated with the specified author,
+    handling pagination as needed. The extracted data is saved as a CSV file in the specified output directory.
+    The CSV columns and order are defined by config.OUTPUT_COLUMNS. If no data is extracted, no file is created.
+
+    Args:
+        author_name (str): The name of the author whose tracks should be extracted.
+        output_dir (str): The directory where the resulting CSV file will be saved.
+
+    Returns:
+        None
+
+    Notes:
+        - The output CSV file is named 'autor_{author_name}_metadados.csv', with a sanitized author name.
+        - If no tracks are found, the function logs a warning and does not create a file.
+        - Progress and status messages are logged using the logger.
+    """
+    logger.info(f"--- Iniciando extração de metadados para o autor: {author_name} ---")
+
+    dados_musicas = extract_author_data(author_name)
+
+    if not dados_musicas:
+        logger.warning("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
+        return
+
+    df = pd.DataFrame(dados_musicas)
+    df = df.reindex(columns=config.OUTPUT_COLUMNS)
+
+    os.makedirs(output_dir, exist_ok=True)
+    safe_author_name = (
+        re.sub(r'[\\/*?:"<>|]', "", author_name).replace(" ", "_").lower()
+    )
+    filename = f"autor_{safe_author_name}_metadados.csv"
+    filepath = Path(output_dir) / filename
+    df.to_csv(filepath, index=False, encoding="utf-8-sig")
+
+    logger.info("\n--- Extração Concluída ---")
+    logger.info(
+        f"Os metadados para '{author_name}' foram salvos com sucesso em: {filepath}"
+    )
 
 
 def download_from_csv(input_csv_path: str, output_dir: str) -> None:
@@ -339,3 +470,57 @@ def download_from_playlist(playlist_id: str, output_dir: str, limit: int = 500) 
     df_audit.to_csv(final_filepath, index=False, encoding="utf-8-sig")
     logger.info("\n--- Processo Completo Concluído ---")
     logger.info(f"O relatório final foi salvo em: {final_filepath}")
+
+
+def download_from_author(author_name: str, output_dir: str) -> None:
+    """
+    Orchestrates the complete workflow for an author: extracts track data, downloads audio files,
+    and saves a single final CSV with results and download status.
+
+    This function automates the end-to-end process for a given author: it extracts all track metadata
+    (handling pagination), downloads available audio files (organizing them into subfolders by author),
+    and saves a comprehensive CSV report with both metadata and download results. The final CSV is timestamped
+    and saved in the output directory.
+
+    Args:
+        author_name (str): The name of the author whose tracks should be processed.
+        output_dir (str): The directory where audio files and the final CSV report will be saved.
+
+    Returns:
+        None
+
+    Process Overview:
+        1. Extracts all track data for the specified author, handling pagination.
+        2. Downloads available audio files, organizing them into subfolders by author.
+        3. Tracks the download status for each track.
+        4. Saves a comprehensive CSV report with metadata and download results, timestamped to avoid overwriting.
+
+    Notes:
+        - If no tracks are found, the function logs a warning and does not create any files.
+        - Progress, warnings, and errors are logged using the logger.
+        - The final CSV file is named 'autor_{author_name}_completo_{timestamp}.csv', with a sanitized author name.
+    """
+    logger.info(f"--- Iniciando processo completo para o autor: {author_name} ---")
+
+    dados_musicas = extract_author_data(author_name)
+
+    if not dados_musicas:
+        logger.warning("Nenhuma música foi extraída. Encerrando o processo.")
+        return
+
+    df = pd.DataFrame(dados_musicas)
+    df_audit = _download_and_audit_dataframe(df, output_dir)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_author_name = (
+        re.sub(r'[\\/*?:"<>|]', "", author_name).replace(" ", "_").lower()
+    )
+    final_filename = f"autor_{safe_author_name}_completo_{timestamp}.csv"
+    final_filepath = Path(output_dir) / final_filename
+
+    df_audit = df_audit.reindex(columns=config.OUTPUT_COLUMNS)
+    df_audit.to_csv(final_filepath, index=False, encoding="utf-8-sig")
+    logger.info("\n--- Processo Completo Concluído ---")
+    logger.info(
+        f"O relatório final para o autor '{author_name}' foi salvo em: {final_filepath}"
+    )

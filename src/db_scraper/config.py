@@ -12,6 +12,7 @@ BASE_HEADERS = {
 # API Templates
 API_TRACKLIST_URL_TEMPLATE = "https://discografiabrasileira.com.br/fonograma/@relationById/{playlist_id}/@type/MusicRecording/@orderBy/@.@order/@orderDir/asc/@pp/{limit}/p/1?shiro_content=true"
 API_CONTENT_URL_TEMPLATE = "https://discografiabrasileira.com.br/api/1.0/content/{data_id}?fields=_id,name,audio[contentUrl;duration],creator[_id;name],recordingOf[_id;name;author[_id;name]]"
+API_AUTHOR_URL_TEMPLATE = "https://discografiabrasileira.com.br/fonograma/xAuthor/{author_name}/@property/audio/"
 
 # Output columns for the final dataset
 COLUMN_DTYPES = {
