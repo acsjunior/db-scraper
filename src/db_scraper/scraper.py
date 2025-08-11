@@ -499,7 +499,9 @@ class DiscografiaScraper:
         logger.info("\n--- Processo de Download Concluído ---")
         logger.info(f"O relatório de auditoria foi salvo em: {new_filepath}")
 
-    def download_from_playlist(self, playlist_id: str, limit: int = 500) -> None:
+    def download_from_playlist(
+        self, playlist_id: str, limit: int = 500, save_report: bool = True
+    ) -> None:
         """
         Orchestrates the complete workflow of extracting playlist data, downloading audio files,
         and saving a final audited CSV report with download statuses in the output directory.
@@ -507,11 +509,12 @@ class DiscografiaScraper:
         This method automates the end-to-end process for a playlist: it extracts all track metadata,
         downloads available audio files (organizing them into subfolders by author), and saves a comprehensive
         CSV report with both metadata and download results. The final CSV is timestamped and saved in the output directory
-        defined for this scraper instance.
+        defined for this scraper instance, if `save_report` is True.
 
         Args:
             playlist_id (str): The unique identifier of the playlist to process.
             limit (int, optional): The maximum number of tracks to process from the playlist. Defaults to 500.
+            save_report (bool, optional): Whether to save the final CSV report with metadata and download results. If False, no CSV is saved. Defaults to True.
 
         Returns:
             None
@@ -520,12 +523,12 @@ class DiscografiaScraper:
             1. Extracts track data from the specified playlist.
             2. Downloads available audio files, organizing them into subfolders by author (within the output directory of the scraper instance).
             3. Tracks the download status for each track.
-            4. Saves a comprehensive CSV report with metadata and download results, timestamped to avoid overwriting, in the output directory.
+            4. If `save_report` is True, saves a comprehensive CSV report with metadata and download results, timestamped to avoid overwriting, in the output directory.
 
         Notes:
             - If no tracks are found, the method logs a warning and does not create any files.
             - Progress, warnings, and errors are logged using the logger.
-            - The final CSV file is named 'playlist_{playlist_id}_completo_{timestamp}.csv' and is saved in the output directory of the scraper instance.
+            - The final CSV file is named 'playlist_{playlist_id}_completo_{timestamp}.csv' and is saved in the output directory of the scraper instance if `save_report` is True.
             - This method is intended to be used as part of the complete playlist download and audit workflow.
         """
         logger.info("--- Iniciando processo: Extração, Download e Auditoria ---")
@@ -538,44 +541,41 @@ class DiscografiaScraper:
         df = pd.DataFrame(dados_musicas)
         df_audit = self._download_and_audit_dataframe(df)
 
-        # Salva o CSV final auditado no diretório de saída principal
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        final_filename = f"playlist_{playlist_id}_completo_{timestamp}.csv"
-        final_filepath = Path(self.output_dir) / final_filename
+        if save_report:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            final_filename = f"playlist_{playlist_id}_completo_{timestamp}.csv"
+            final_filepath = Path(self.output_dir) / final_filename
 
-        df_audit = df_audit.reindex(columns=self.config.OUTPUT_COLUMNS)
-        df_audit.to_csv(final_filepath, index=False, encoding="utf-8-sig")
+            df_audit = df_audit.reindex(columns=self.config.OUTPUT_COLUMNS)
+            df_audit.to_csv(final_filepath, index=False, encoding="utf-8-sig")
 
-        logger.info("\n--- Processo Completo Concluído ---")
-        logger.info(f"O relatório final foi salvo em: {final_filepath}")
+            logger.info("\n--- Processo de Download Concluído ---")
+            logger.info(f"O relatório final foi salvo em: {final_filepath}")
 
-    def download_from_author(self, author_name: str) -> None:
+        else:
+            logger.info("\n--- Processo de Download Concluído ---")
+
+    def download_from_author(self, author_name: str, save_report: bool = True) -> None:
         """
         Orchestrates the complete workflow for an author: extracts track data, downloads audio files,
-        and saves a single final CSV with results and download status.
+        and saves a final CSV report with the results and download statuses.
 
-        This function automates the end-to-end process for a given author: it extracts all track metadata
-        (handling pagination), downloads available audio files (organizing them into subfolders by author),
-        and saves a comprehensive CSV report with both metadata and download results. The final CSV is timestamped
-        and saved in the output directory.
+        This method automates the end-to-end process for an author: it extracts all track metadata
+        (including pagination), downloads available audio files (organizing them into subfolders by author),
+        and saves a comprehensive CSV report with metadata and download results. The final CSV file is
+        saved in the output directory defined for the scraper instance, with a timestamp to avoid overwriting.
 
         Args:
             author_name (str): The name of the author whose tracks should be processed.
-            output_dir (str): The directory where audio files and the final CSV report will be saved.
+            save_report (bool, optional): If True, saves the final CSV report with the results. If False, does not save the CSV. Default is True.
 
         Returns:
             None
 
-        Process Overview:
-            1. Extracts all track data for the specified author, handling pagination.
-            2. Downloads available audio files, organizing them into subfolders by author.
-            3. Tracks the download status for each track.
-            4. Saves a comprehensive CSV report with metadata and download results, timestamped to avoid overwriting.
-
         Notes:
-            - If no tracks are found, the function logs a warning and does not create any files.
+            - If no tracks are found, the method logs a warning and does not create any files.
             - Progress, warnings, and errors are logged using the logger.
-            - The final CSV file is named 'autor_{author_name}_completo_{timestamp}.csv', with a sanitized author name.
+            - The final CSV file is named 'autor_{author_name}_completo_{timestamp}.csv', with the author name sanitized.
         """
         logger.info(f"--- Iniciando processo completo para o autor: {author_name} ---")
 
@@ -588,17 +588,20 @@ class DiscografiaScraper:
         df = pd.DataFrame(dados_musicas)
         df_audit = self._download_and_audit_dataframe(df)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_author_name = (
-            re.sub(r'[\\/*?:"<>|]', "", author_name).replace(" ", "_").lower()
-        )
-        final_filename = f"autor_{safe_author_name}_completo_{timestamp}.csv"
-        final_filepath = Path(self.output_dir) / final_filename
+        if save_report:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_author_name = (
+                re.sub(r'[\\/*?:"<>|]', "", author_name).replace(" ", "_").lower()
+            )
+            final_filename = f"autor_{safe_author_name}_completo_{timestamp}.csv"
+            final_filepath = Path(self.output_dir) / final_filename
 
-        df_audit = df_audit.reindex(columns=self.config.OUTPUT_COLUMNS)
-        df_audit.to_csv(final_filepath, index=False, encoding="utf-8-sig")
+            df_audit = df_audit.reindex(columns=self.config.OUTPUT_COLUMNS)
+            df_audit.to_csv(final_filepath, index=False, encoding="utf-8-sig")
 
-        logger.info("\n--- Processo Completo Concluído ---")
-        logger.info(
-            f"O relatório final para o autor '{author_name}' foi salvo em: {final_filepath}"
-        )
+            logger.info("\n--- Processo de Download Concluído ---")
+            logger.info(
+                f"O relatório final para o autor '{author_name}' foi salvo em: {final_filepath}"
+            )
+        else:
+            logger.info("\n--- Processo de Download Concluído ---")
