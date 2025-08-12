@@ -28,7 +28,8 @@ COLUMN_DTYPES = {
     'audio_url': str,
     'pasta': str,
     'nome_arquivo': str,
-    'data_download': str
+    'data_download': str,
+    'gdrive_url': str
 }
 OUTPUT_COLUMNS = list(COLUMN_DTYPES.keys())
 
