@@ -242,7 +242,7 @@ class DiscografiaScraper:
         return df
 
     def extract_playlist_data(
-        self, playlist_id: str, limit: int = 500
+        self, playlist_id: str, limit: int = 9999
     ) -> List[Dict[str, Any]]:
         """
         Extracts detailed metadata for all tracks in a given playlist from the Discografia Brasileira website.
@@ -253,7 +253,7 @@ class DiscografiaScraper:
 
         Args:
             playlist_id (str): The unique identifier of the playlist on the Discografia Brasileira website.
-            limit (int, optional): The maximum number of tracks to extract. Defaults to 500.
+            limit (int, optional): The maximum number of tracks to extract. Defaults to 9999.
 
         Returns:
             List[Dict[str, Any]]: A list of dictionaries, each containing metadata for a track. Returns an empty list if an error occurs.
@@ -372,7 +372,7 @@ class DiscografiaScraper:
 
         return all_songs_data
 
-    def save_playlist_to_csv(self, playlist_id: str, limit: int = 500) -> None:
+    def save_playlist_to_csv(self, playlist_id: str, limit: int = 9999) -> None:
         """
         Extracts playlist metadata and saves it as a CSV file in the output directory.
 
@@ -382,7 +382,7 @@ class DiscografiaScraper:
 
         Args:
             playlist_id (str): The unique identifier of the playlist to extract.
-            limit (int, optional): The maximum number of tracks to extract. Defaults to 500.
+            limit (int, optional): The maximum number of tracks to extract. Defaults to 9999.
 
         Returns:
             None
@@ -505,7 +505,7 @@ class DiscografiaScraper:
     def download_from_playlist(
         self,
         playlist_id: str,
-        limit: int = 500,
+        limit: int = 9999,
         save_report: bool = True,
         report_xlsx: bool = False,
         report_columns: list = None,
@@ -521,7 +521,7 @@ class DiscografiaScraper:
 
         Args:
             playlist_id (str): The unique identifier of the playlist to process.
-            limit (int, optional): The maximum number of tracks to process from the playlist. Defaults to 500.
+            limit (int, optional): The maximum number of tracks to process from the playlist. Defaults to 9999.
             save_report (bool, optional): If True, saves the final report (CSV or XLSX) with metadata and download results. If False, no report is saved. Defaults to True.
             report_xlsx (bool, optional): If True and save_report is True, saves the report as an XLSX file instead of CSV. Defaults to False.
             report_columns (list, optional): List of columns to include in the final report. If None, uses the default columns from configuration.
