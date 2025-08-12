@@ -24,6 +24,7 @@ COLUMN_DTYPES = {
     'ano_lancamento_disco': str,
     'data_gravacao': str,
     'data_lancamento': str,
+    'fonte_url': str,
     'audio_url': str,
     'pasta': str,
     'nome_arquivo': str,

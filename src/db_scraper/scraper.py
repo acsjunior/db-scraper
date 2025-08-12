@@ -126,6 +126,8 @@ class DiscografiaScraper:
             else ""
         )
 
+        fonte_url = titulo_tag.get("href", "") if titulo_tag else ""
+
         audio_url = ""
         if data_id:
             content_url = self.config.API_CONTENT_URL_TEMPLATE.format(data_id=data_id)
@@ -150,6 +152,7 @@ class DiscografiaScraper:
             "ano_lancamento_disco": ano_disco,
             "data_gravacao": data_gravacao,
             "data_lancamento": data_lancamento,
+            "fonte_url": fonte_url,
             "audio_url": audio_url,
         }
 
