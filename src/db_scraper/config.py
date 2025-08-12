@@ -31,3 +31,14 @@ COLUMN_DTYPES = {
     'data_download': str
 }
 OUTPUT_COLUMNS = list(COLUMN_DTYPES.keys())
+
+UI_REPORT_COLUMNS = [
+    'titulo',
+    'interprete',
+    'autor',
+    'disco',
+    'ano_lancamento_disco',
+    'pasta',
+    'nome_arquivo',
+    'fonte_url'
+]
