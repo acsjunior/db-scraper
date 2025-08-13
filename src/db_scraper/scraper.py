@@ -104,6 +104,9 @@ class DiscografiaScraper:
         interprete_tags = track.select(".track-performer a")
         interprete = " / ".join([tag.text.strip() for tag in interprete_tags])
 
+        genero_tag = track.select_one(".tags a.tag-name")
+        genero = genero_tag.text.strip() if genero_tag else ""
+
         disco_tag = track.select_one(".track-duration a")
         disco = disco_tag.text.strip() if disco_tag else ""
 
@@ -148,6 +151,7 @@ class DiscografiaScraper:
             "titulo": titulo,
             "autor": autor,
             "interprete": interprete,
+            "genero": genero,
             "disco": disco,
             "ano_lancamento_disco": ano_disco,
             "data_gravacao": data_gravacao,
