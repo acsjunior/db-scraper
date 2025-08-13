@@ -302,51 +302,50 @@ class DiscografiaScraper:
 
         return all_songs_data
 
-    def extract_author_data(self, author_name: str) -> List[Dict[str, Any]]:
+    def extract_data_from_url(self, filter_url: str) -> List[Dict[str, Any]]:
         """
-        Extracts metadata for all tracks by a given author, handling pagination, from the Discografia Brasileira website.
+        Extracts track metadata from a generic filter URL, handling pagination automatically.
 
-        This method fetches all pages of tracks associated with the specified author, parses the HTML to extract
-        track information for each song using the internal helper method `_parse_track_data`, and returns a list of dictionaries
-        with all relevant metadata. Pagination is handled automatically by following the "Next" page links until no more
-        tracks are found.
+        This method fetches all pages of tracks from the provided filter URL (such as a playlist, author, or genre filter),
+        parses the HTML to extract track information for each song using the internal helper method `_parse_track_data`,
+        and returns a list of dictionaries with all relevant metadata. Pagination is handled by following the "Next" page links
+        until no more tracks are found.
 
         Args:
-            author_name (str): The name of the author whose tracks should be extracted.
+            filter_url (str): The initial URL to start extracting track data from. Can be any valid filter or listing URL from the Discografia Brasileira website.
 
         Returns:
-            List[Dict[str, Any]]: A list of dictionaries, each containing metadata for a track by the author. Returns an empty list if no tracks are found or an error occurs.
+            List[Dict[str, Any]]: A list of dictionaries, each containing metadata for a track. Returns an empty list if no tracks are found or an error occurs.
                 Each dictionary contains the following keys:
                     - data_id (str or None): The unique identifier of the track.
                     - titulo (str): The title of the track.
                     - autor (str): The author(s) of the track.
                     - interprete (str): The performer(s) of the track.
+                    - genero (str): The genre of the track.
                     - disco (str): The album or record name.
                     - ano_lancamento_disco (str): The release year of the album.
                     - data_gravacao (str): The recording date.
                     - data_lancamento (str): The release date.
+                    - fonte_url (str): The source URL for the track.
                     - audio_url (str): The URL to the audio file, if available.
 
-        Notes:
-            - Uses the `_parse_track_data` helper to centralize parsing logic.
-            - If a track does not have a data-id, the audio_url will be an empty string.
-            - Progress, warnings, and errors are logged using the logger.
-            - Pagination is handled by following the "Next" page link until it is no longer present.
-            - This method is intended to be used as part of the scraping workflow for authors.
-        """
-        # Format the author's name to be URL-safe (e.g., "Nilton Bastos" -> "Nilton%20Bastos")
-        formatted_author = quote_plus(author_name)
-        next_page_url = self.config.API_AUTHOR_URL_TEMPLATE.format(
-            author_name=formatted_author
-        )
+        Workflow:
+            1. Fetches the initial filter URL and parses the HTML for track elements.
+            2. For each track, extracts metadata using `_parse_track_data`.
+            3. Follows the "Next" page link if present, repeating the process until no more pages are found.
+            4. Returns a list of all extracted track metadata dictionaries.
 
+        Notes:
+            - This method is generic and can be used for any paginated track listing on the Discografia Brasileira website.
+            - If no tracks are found or an error occurs, an empty list is returned.
+            - Progress, warnings, and errors are logged using the logger.
+        """
         all_songs_data = []
+        next_page_url = filter_url
 
         page_num = 1
         while next_page_url:
-            logger.info(
-                f"Buscando dados do autor '{author_name}', página {page_num}..."
-            )
+            logger.info(f"Buscando dados da URL (página {page_num})...")
             try:
                 response = self.session.get(next_page_url)
                 response.raise_for_status()
@@ -354,7 +353,7 @@ class DiscografiaScraper:
                 tracks = soup.find_all("div", class_="track")
                 if not tracks:
                     logger.info(
-                        "Nenhuma faixa encontrada nesta página. Encerrando a busca do autor."
+                        "Nenhuma faixa encontrada nesta página. Encerrando a busca."
                     )
                     break
 
@@ -375,49 +374,54 @@ class DiscografiaScraper:
                     next_page_url = None
 
             except requests.RequestException as e:
-                logger.error(f"Erro fatal ao buscar a página do autor: {e}")
+                logger.error(f"Erro fatal ao buscar a página: {e}")
                 break
 
         return all_songs_data
 
-    def save_playlist_to_csv(self, playlist_id: str, limit: int = 9999) -> None:
+    def extract_author_data(self, author_name: str) -> List[Dict[str, Any]]:
         """
-        Extracts playlist metadata and saves it as a CSV file in the output directory.
+        Extracts metadata for all tracks by a given author, handling pagination, from the Discografia Brasileira website.
 
-        This method retrieves detailed metadata for all tracks in a specified playlist, including title, author, performer,
-        album, year, recording and release dates, and audio URL. The extracted data is saved as a CSV file in the output directory
-        defined for this scraper instance. The CSV columns and order are defined by the configuration. If no data is extracted, no file is created.
+        This method builds the author filter URL, then delegates to `extract_data_from_url` to fetch all pages of tracks
+        associated with the specified author. It parses the HTML to extract track information for each song using the
+        internal helper method `_parse_track_data`, and returns a list of dictionaries with all relevant metadata.
+        Pagination is handled automatically by following the "Next" page links until no more tracks are found.
 
         Args:
-            playlist_id (str): The unique identifier of the playlist to extract.
-            limit (int, optional): The maximum number of tracks to extract. Defaults to 9999.
+            author_name (str): The name of the author whose tracks should be extracted.
 
         Returns:
-            None
+            List[Dict[str, Any]]: A list of dictionaries, each containing metadata for a track by the author. Returns an empty list if no tracks are found or an error occurs.
+                Each dictionary contains the following keys:
+                    - data_id (str or None): The unique identifier of the track.
+                    - titulo (str): The title of the track.
+                    - autor (str): The author(s) of the track.
+                    - interprete (str): The performer(s) of the track.
+                    - genero (str): The genre of the track.
+                    - disco (str): The album or record name.
+                    - ano_lancamento_disco (str): The release year of the album.
+                    - data_gravacao (str): The recording date.
+                    - data_lancamento (str): The release date.
+                    - fonte_url (str): The source URL for the track.
+                    - audio_url (str): The URL to the audio file, if available.
+
+        Workflow:
+            1. Formats the author's name for use in a URL.
+            2. Builds the author filter URL using the configuration template.
+            3. Calls `extract_data_from_url` to fetch and parse all paginated track data for the author.
+            4. Returns a list of all extracted track metadata dictionaries.
 
         Notes:
-            - The output CSV file is named 'playlist_{playlist_id}_metadata.csv' and is saved in the output directory of the scraper instance.
-            - If no tracks are found, the method logs a warning and does not create a file.
-            - Progress and status messages are logged using the logger.
-            - This method is intended to be used as part of the playlist scraping and export workflow.
+            - This method is intended to be used as part of the scraping workflow for authors.
+            - If no tracks are found or an error occurs, an empty list is returned.
+            - Progress, warnings, and errors are logged using the logger.
         """
-        logger.info("--- Iniciando processo ---")
-        dados_musicas = self.extract_playlist_data(playlist_id=playlist_id, limit=limit)
-
-        if not dados_musicas:
-            logger.warning("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
-            return
-
-        df = pd.DataFrame(dados_musicas)
-        df = df.reindex(columns=self.config.OUTPUT_COLUMNS)
-
-        os.makedirs(self.output_dir, exist_ok=True)
-        filename = f"playlist_{playlist_id}_metadata.csv"
-        filepath = Path(self.output_dir) / filename
-        df.to_csv(filepath, index=False, encoding="utf-8-sig")
-
-        logger.info("\n--- Extração concluída ---")
-        logger.info(f"Os metadados foram salvos com sucesso em: {filepath}")
+        formatted_author = quote_plus(author_name)
+        author_url = self.config.API_AUTHOR_URL_TEMPLATE.format(
+            author_name=formatted_author
+        )
+        return self.extract_data_from_url(author_url)
 
     def save_author_to_csv(self, author_name: str) -> None:
         """
@@ -464,6 +468,90 @@ class DiscografiaScraper:
         logger.info(
             f"Os metadados para '{author_name}' foram salvos com sucesso em: {filepath}"
         )
+
+    def save_filter_to_csv(self, filter_url: str, report_name: str) -> None:
+        """
+        Extracts track metadata from a generic filter URL and saves it as a CSV file in the output directory.
+
+        This method retrieves detailed metadata for all tracks from the provided filter URL (such as a playlist, author, or genre filter),
+        handling pagination as needed. The extracted data is saved as a CSV file in the output directory defined for this scraper instance.
+        The CSV columns and order are defined by the configuration. If no data is extracted, no file is created.
+
+        Args:
+            filter_url (str): The initial URL to start extracting track data from. Can be any valid filter or listing URL from the Discografia Brasileira website.
+            report_name (str): The name to use for the output CSV file (will be sanitized and used in the filename).
+
+        Returns:
+            None
+
+        Notes:
+            - The output CSV file is named 'filter_{report_name}_metadata.csv', with a sanitized report name, and is saved in the output directory of the scraper instance.
+            - If no tracks are found, the method logs a warning and does not create a file.
+            - Progress and status messages are logged using the logger.
+            - This method is intended to be used for exporting metadata from any paginated filter or listing on the Discografia Brasileira website.
+        """
+        logger.info(
+            f"--- Iniciando extração de metadados para o filtro: {report_name} ---"
+        )
+
+        dados_musicas = self.extract_data_from_url(filter_url)
+
+        if not dados_musicas:
+            logger.warning("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
+            return
+
+        df = pd.DataFrame(dados_musicas)
+        df = df.reindex(columns=self.config.OUTPUT_COLUMNS)
+
+        os.makedirs(self.output_dir, exist_ok=True)
+        safe_name = re.sub(r'[\\/*?:"<>|]', "", report_name).replace(" ", "_").lower()
+        filename = f"filter_{safe_name}_metadata.csv"
+        filepath = Path(self.output_dir) / filename
+        df.to_csv(filepath, index=False, encoding="utf-8-sig")
+
+        logger.info("\n--- Extração Concluída ---")
+        logger.info(
+            f"Os metadados para o filtro '{report_name}' foram salvos com sucesso em: {filepath}"
+        )
+
+    def save_playlist_to_csv(self, playlist_id: str, limit: int = 9999) -> None:
+        """
+        Extracts playlist metadata and saves it as a CSV file in the output directory.
+
+        This method retrieves detailed metadata for all tracks in a specified playlist, including title, author, performer,
+        album, year, recording and release dates, and audio URL. The extracted data is saved as a CSV file in the output directory
+        defined for this scraper instance. The CSV columns and order are defined by the configuration. If no data is extracted, no file is created.
+
+        Args:
+            playlist_id (str): The unique identifier of the playlist to extract.
+            limit (int, optional): The maximum number of tracks to extract. Defaults to 9999.
+
+        Returns:
+            None
+
+        Notes:
+            - The output CSV file is named 'playlist_{playlist_id}_metadata.csv' and is saved in the output directory of the scraper instance.
+            - If no tracks are found, the method logs a warning and does not create a file.
+            - Progress and status messages are logged using the logger.
+            - This method is intended to be used as part of the playlist scraping and export workflow.
+        """
+        logger.info("--- Iniciando processo ---")
+        dados_musicas = self.extract_playlist_data(playlist_id=playlist_id, limit=limit)
+
+        if not dados_musicas:
+            logger.warning("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
+            return
+
+        df = pd.DataFrame(dados_musicas)
+        df = df.reindex(columns=self.config.OUTPUT_COLUMNS)
+
+        os.makedirs(self.output_dir, exist_ok=True)
+        filename = f"playlist_{playlist_id}_metadata.csv"
+        filepath = Path(self.output_dir) / filename
+        df.to_csv(filepath, index=False, encoding="utf-8-sig")
+
+        logger.info("\n--- Extração concluída ---")
+        logger.info(f"Os metadados foram salvos com sucesso em: {filepath}")
 
     def download_from_csv(self, input_csv_path: str) -> None:
         """
@@ -657,6 +745,85 @@ class DiscografiaScraper:
             logger.info("\n--- Processo de Download Concluído ---")
             logger.info(
                 f"O relatório final para o autor '{author_name}' foi salvo em: {filepath}"
+            )
+        else:
+            logger.info("\n--- Processo de Download Concluído ---")
+
+    def download_from_filter(
+        self,
+        filter_url: str,
+        report_name: str,
+        save_report: bool = True,
+        report_xlsx: bool = False,
+        report_columns: list = None,
+    ) -> None:
+        """
+        Executes the complete workflow for a generic filter: extracts track metadata, downloads audio files, and optionally saves a final audit report (CSV or XLSX) in the output directory.
+
+        This method automates the end-to-end process for any paginated filter (such as genre, search, or custom listing) by:
+            1. Extracting all track metadata from the specified filter URL.
+            2. Downloading available audio files, organizing them into subfolders by author within the output directory.
+            3. Tracking the download status for each track.
+            4. Optionally saving a comprehensive report (CSV or XLSX) with metadata and download results, timestamped to avoid overwriting.
+
+        Args:
+            filter_url (str): The initial URL to start extracting track data from. Can be any valid filter or listing URL from the Discografia Brasileira website.
+            report_name (str): The name to use for the output report file (will be sanitized and used in the filename).
+            save_report (bool, optional): If True, saves the final report (CSV or XLSX) with metadata and download results. If False, no report is saved. Defaults to True.
+            report_xlsx (bool, optional): If True and save_report is True, saves the report as an XLSX file instead of CSV. Defaults to False.
+            report_columns (list, optional): List of columns to include in the final report. If None, uses the default columns from configuration.
+
+        Returns:
+            None
+
+        Workflow:
+            - Extracts track data from the specified filter URL, handling pagination.
+            - Downloads audio files for tracks with valid URLs, organizing them by author.
+            - Updates audit information for each track (download status, folder, filename, date).
+            - If `save_report` is True, saves a comprehensive report (CSV or XLSX) with metadata and download results, timestamped in the output directory. The columns included can be customized via `report_columns`.
+
+        Notes:
+            - If no tracks are found, the method logs a warning and does not create any files.
+            - The final report is named 'filter_{report_name}_{timestamp}.csv' or '.xlsx', with the report name sanitized, and is saved in the output directory if `save_report` is True.
+            - Progress, warnings, and errors are logged using the logger.
+            - This method is intended for use in the complete download and audit workflow for any paginated filter or listing.
+        """
+        logger.info(f"--- Iniciando processo completo para o filtro: {report_name} ---")
+
+        dados_musicas = self.extract_data_from_url(filter_url)
+
+        if not dados_musicas:
+            logger.warning("Nenhuma música foi extraída. Encerrando o processo.")
+            return
+
+        df = pd.DataFrame(dados_musicas)
+        df_audit = self._download_and_audit_dataframe(df)
+
+        if save_report:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = (
+                re.sub(r'[\\/*?:"<>|]', "", report_name).replace(" ", "_").lower()
+            )
+            filename = f"filter_{safe_name}_{timestamp}.csv"
+            filepath = Path(self.output_dir) / filename
+
+            columns_to_save = (
+                report_columns
+                if report_columns is not None
+                else self.config.OUTPUT_COLUMNS
+            )
+            df_audit = df_audit.reindex(columns=columns_to_save)
+
+            if report_xlsx:
+                df_audit.to_excel(filepath.with_suffix(".xlsx"), index=False)
+            else:
+                df_audit.to_csv(
+                    filepath.with_suffix(".csv"), index=False, encoding="utf-8-sig"
+                )
+
+            logger.info("\n--- Processo de Download Concluído ---")
+            logger.info(
+                f"O relatório final para o filtro '{report_name}' foi salvo em: {filepath}"
             )
         else:
             logger.info("\n--- Processo de Download Concluído ---")
