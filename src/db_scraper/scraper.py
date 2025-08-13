@@ -39,24 +39,33 @@ class DiscografiaScraper:
 
     def __init__(self, output_dir: str):
         """
-        Initializes the DiscografiaScraper with a specified output directory.
+        Initializes the DiscografiaScraper with a specified output directory and prepares the HTTP session.
 
-        This constructor sets up the base directory for saving all CSV and MP3 files, configures the HTTP headers
-        for requests, ensures the output directory exists, and logs the initialization status.
+        This constructor sets up the base directory for saving all CSV and MP3 files, configures a persistent
+        requests.Session with default HTTP headers, ensures the output directory exists, and logs the initialization status.
 
         Args:
             output_dir (str): The base directory where all output files (CSV and MP3) will be saved.
 
         Attributes:
             output_dir (Path): The resolved output directory as a Path object.
-            headers (dict): The HTTP headers used for all requests.
+            session (requests.Session): The persistent HTTP session used for all requests, with headers set from config.
+            config (module): The configuration module with constants and templates.
+
+        Workflow:
+            1. Sets the output directory and creates it if it does not exist.
+            2. Initializes a requests.Session and updates its headers with the default headers from config.
+            3. Logs the initialization and output path.
 
         Notes:
+            - All HTTP requests throughout the scraper use the same session for efficiency and consistent headers.
             - If the output directory does not exist, it will be created automatically.
             - A log message is generated to confirm the initialization and output path.
         """
         self.config = config
         self.output_dir = Path(output_dir)
+        self.session = requests.Session()
+        self.session.headers.update(self.config.BASE_HEADERS)
         os.makedirs(self.output_dir, exist_ok=True)
         logger.info(
             f"Scraper inicializado. Os arquivos serão salvos em: {self.output_dir}"
@@ -135,9 +144,7 @@ class DiscografiaScraper:
         if data_id:
             content_url = self.config.API_CONTENT_URL_TEMPLATE.format(data_id=data_id)
             try:
-                content_response = requests.get(
-                    content_url, headers=self.config.BASE_HEADERS, timeout=10
-                )
+                content_response = self.session.get(content_url, timeout=10)
                 content_response.raise_for_status()
                 json_data = content_response.json()
                 audio_url = json_data["audio"][0]["contentUrl"][0]["@value"]
@@ -221,11 +228,8 @@ class DiscografiaScraper:
             else:
                 logger.info(f"  - Baixando: '{titulo}'...")
                 try:
-                    audio_response = requests.get(
-                        str(row["audio_url"]),
-                        headers=self.config.BASE_HEADERS,
-                        stream=True,
-                        timeout=20,
+                    audio_response = self.session.get(
+                        str(row["audio_url"]), stream=True, timeout=20
                     )
                     audio_response.raise_for_status()
                     with open(filepath, "wb") as f:
@@ -284,7 +288,7 @@ class DiscografiaScraper:
 
         logger.info(f"Buscando dados da playlist ID: {playlist_id}...")
         try:
-            response = requests.get(tracklist_url, headers=self.config.BASE_HEADERS)
+            response = self.session.get(tracklist_url)
             response.raise_for_status()
             soup = BeautifulSoup(response.content, "html.parser")
             tracks = soup.find_all("div", class_="track")
@@ -344,7 +348,7 @@ class DiscografiaScraper:
                 f"Buscando dados do autor '{author_name}', página {page_num}..."
             )
             try:
-                response = requests.get(next_page_url, headers=self.config.BASE_HEADERS)
+                response = self.session.get(next_page_url)
                 response.raise_for_status()
                 soup = BeautifulSoup(response.content, "html.parser")
                 tracks = soup.find_all("div", class_="track")
