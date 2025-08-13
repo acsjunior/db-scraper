@@ -249,6 +249,42 @@ class DiscografiaScraper:
 
         return df
 
+    def _save_metadata_to_csv(self, data: List[Dict[str, Any]], filename: str) -> None:
+        """
+        Saves a list of track metadata dictionaries as a CSV file in the output directory.
+
+        This internal helper method takes a list of dictionaries (each representing track metadata),
+        creates a DataFrame, reorders the columns according to the configuration, and saves the result as a CSV file
+        in the output directory of the scraper instance. If the data list is empty, no file is created and a warning is logged.
+
+        Args:
+            data (List[Dict[str, Any]]): A list of dictionaries, each containing metadata for a track.
+            filename (str): The name of the output CSV file (should include the .csv extension).
+
+        Returns:
+            None
+
+        Notes:
+            - The output CSV file is saved in the output directory specified when initializing the scraper instance.
+            - The columns and their order are defined by the configuration (self.config.OUTPUT_COLUMNS).
+            - If the data list is empty, the method logs a warning and does not create a file.
+            - Progress and status messages are logged using the logger.
+            - This method is intended for internal use by higher-level export methods.
+        """
+        if not data:
+            logger.warning("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
+            return
+
+        df = pd.DataFrame(data)
+        df = df.reindex(columns=self.config.OUTPUT_COLUMNS)
+
+        os.makedirs(self.output_dir, exist_ok=True)
+        filepath = Path(self.output_dir) / filename
+        df.to_csv(filepath, index=False, encoding="utf-8-sig")
+
+        logger.info("\n--- Extração Concluída ---")
+        logger.info(f"Os metadados foram salvos com sucesso em: {filepath}")
+
     def extract_playlist_data(
         self, playlist_id: str, limit: int = 9999
     ) -> List[Dict[str, Any]]:
@@ -428,8 +464,9 @@ class DiscografiaScraper:
         Extracts metadata for all tracks by a given author and saves it as a CSV file in the output directory.
 
         This method retrieves detailed metadata for all tracks associated with the specified author, handling pagination as needed.
-        The extracted data is saved as a CSV file in the output directory defined for this scraper instance. The CSV columns and order
-        are defined by the configuration. If no data is extracted, no file is created.
+        The extracted data is saved as a CSV file in the output directory defined for this scraper instance, using a sanitized author name in the filename.
+        The CSV columns and order are defined by the configuration. If no data is extracted, no file is created.
+        This method delegates the actual file writing to the internal helper `_save_metadata_to_csv`.
 
         Args:
             author_name (str): The name of the author whose tracks should be extracted.
@@ -438,36 +475,20 @@ class DiscografiaScraper:
             None
 
         Notes:
-            - The output CSV file is named 'autor_{author_name}_metadados.csv', with a sanitized author name, and is saved in the output directory of the scraper instance.
+            - The output CSV file is named 'author_{author_name}_metadata.csv', with a sanitized author name, and is saved in the output directory of the scraper instance.
             - If no tracks are found, the method logs a warning and does not create a file.
             - Progress and status messages are logged using the logger.
             - This method is intended to be used as part of the author scraping and export workflow.
+            - The actual file writing is performed by the internal helper `_save_metadata_to_csv`.
         """
         logger.info(
             f"--- Iniciando extração de metadados para o autor: {author_name} ---"
         )
 
         dados_musicas = self.extract_author_data(author_name)
-
-        if not dados_musicas:
-            logger.warning("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
-            return
-
-        df = pd.DataFrame(dados_musicas)
-        df = df.reindex(columns=self.config.OUTPUT_COLUMNS)
-
-        os.makedirs(self.output_dir, exist_ok=True)
-        safe_author_name = (
-            re.sub(r'[\\/*?:"<>|]', "", author_name).replace(" ", "_").lower()
-        )
-        filename = f"autor_{safe_author_name}_metadados.csv"
-        filepath = Path(self.output_dir) / filename
-        df.to_csv(filepath, index=False, encoding="utf-8-sig")
-
-        logger.info("\n--- Extração Concluída ---")
-        logger.info(
-            f"Os metadados para '{author_name}' foram salvos com sucesso em: {filepath}"
-        )
+        safe_name = re.sub(r'[\\/*?:"<>|]', "", author_name).replace(" ", "_").lower()
+        filename = f"author_{safe_name}_metadata.csv"
+        self._save_metadata_to_csv(dados_musicas, filename)
 
     def save_filter_to_csv(self, filter_url: str, report_name: str) -> None:
         """
@@ -496,31 +517,18 @@ class DiscografiaScraper:
 
         dados_musicas = self.extract_data_from_url(filter_url)
 
-        if not dados_musicas:
-            logger.warning("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
-            return
-
-        df = pd.DataFrame(dados_musicas)
-        df = df.reindex(columns=self.config.OUTPUT_COLUMNS)
-
-        os.makedirs(self.output_dir, exist_ok=True)
         safe_name = re.sub(r'[\\/*?:"<>|]', "", report_name).replace(" ", "_").lower()
         filename = f"filter_{safe_name}_metadata.csv"
-        filepath = Path(self.output_dir) / filename
-        df.to_csv(filepath, index=False, encoding="utf-8-sig")
-
-        logger.info("\n--- Extração Concluída ---")
-        logger.info(
-            f"Os metadados para o filtro '{report_name}' foram salvos com sucesso em: {filepath}"
-        )
+        self._save_metadata_to_csv(dados_musicas, filename)
 
     def save_playlist_to_csv(self, playlist_id: str, limit: int = 9999) -> None:
         """
-        Extracts playlist metadata and saves it as a CSV file in the output directory.
+        Extracts metadata for all tracks in a given playlist and saves it as a CSV file in the output directory.
 
         This method retrieves detailed metadata for all tracks in a specified playlist, including title, author, performer,
         album, year, recording and release dates, and audio URL. The extracted data is saved as a CSV file in the output directory
-        defined for this scraper instance. The CSV columns and order are defined by the configuration. If no data is extracted, no file is created.
+        defined for this scraper instance, using the playlist ID in the filename. The CSV columns and order are defined by the configuration.
+        If no data is extracted, no file is created. This method delegates the actual file writing to the internal helper `_save_metadata_to_csv`.
 
         Args:
             playlist_id (str): The unique identifier of the playlist to extract.
@@ -534,24 +542,15 @@ class DiscografiaScraper:
             - If no tracks are found, the method logs a warning and does not create a file.
             - Progress and status messages are logged using the logger.
             - This method is intended to be used as part of the playlist scraping and export workflow.
+            - The actual file writing is performed by the internal helper `_save_metadata_to_csv`.
         """
-        logger.info("--- Iniciando processo ---")
+        logger.info(
+            f"--- Iniciando extração de metadados para a playlist: {playlist_id} ---"
+        )
         dados_musicas = self.extract_playlist_data(playlist_id=playlist_id, limit=limit)
 
-        if not dados_musicas:
-            logger.warning("Nenhum dado foi extraído. O arquivo CSV não será gerado.")
-            return
-
-        df = pd.DataFrame(dados_musicas)
-        df = df.reindex(columns=self.config.OUTPUT_COLUMNS)
-
-        os.makedirs(self.output_dir, exist_ok=True)
         filename = f"playlist_{playlist_id}_metadata.csv"
-        filepath = Path(self.output_dir) / filename
-        df.to_csv(filepath, index=False, encoding="utf-8-sig")
-
-        logger.info("\n--- Extração concluída ---")
-        logger.info(f"Os metadados foram salvos com sucesso em: {filepath}")
+        self._save_metadata_to_csv(dados_musicas, filename)
 
     def download_from_csv(self, input_csv_path: str) -> None:
         """
